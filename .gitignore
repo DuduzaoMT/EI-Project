@@ -1,0 +1,20 @@
+# Maven / Quarkus
+**/target/
+**/.mvn/wrapper/maven-wrapper.jar
+
+# Terraform
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.*
+**/*.tfvars
+**/.terraform.lock.hcl
+crash.log
+
+# IDEs & OS
+**/.idea/
+**/.vscode/
+**/*.iml
+.DS_Store
+
+# Logs
+**/*.log

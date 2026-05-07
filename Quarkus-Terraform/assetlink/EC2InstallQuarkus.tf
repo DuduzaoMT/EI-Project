@@ -16,8 +16,8 @@ provider "aws" {
 resource "aws_instance" "exampleDeployQuarkus" {
     # Amazon Linux ARM AMI built by Amazon Web Services - FOR DOCKER image COMPATIBILITY if compiled previously on ARM
     # adapt accordingly the architecture where you compiled it
-  ami                     = "ami-0bb7267a511c0a8e8" 
-  instance_type           = "t4g.small"
+  ami                     = "ami-0eb38b817b93460ac" #x86 - ami-0eb38b817b93460ac # arm - ami-0bb7267a511c0a8e8
+  instance_type           = "t3.small" #x86- "t3.small" #arm - t4g.small
   vpc_security_group_ids  = [aws_security_group.instance.id]
   key_name                = "vockey"
 
