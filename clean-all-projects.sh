@@ -8,6 +8,10 @@ cd microservices/FlexibilityEvent
 mvn clean
 cd ../..
 
+cd microservices/GridBalancing	
+mvn clean
+cd ../..
+
 cd microservices/Prosumer	
 mvn clean
 cd ../..

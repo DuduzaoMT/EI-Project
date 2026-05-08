@@ -13,6 +13,11 @@ cd Quarkus-Terraform/flexibilityEvent
 terraform destroy -auto-approve
 cd ../..
 
+#Terraform - Quarkus gridBalancing
+cd Quarkus-Terraform/gridBalancing
+terraform destroy -auto-approve
+cd ../..
+
 # #Terraform - Quarkus prosumer
 cd Quarkus-Terraform/prosumer
 terraform destroy -auto-approve
