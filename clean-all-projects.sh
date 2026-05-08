@@ -12,6 +12,10 @@ cd microservices/GridBalancing
 mvn clean
 cd ../..
 
+cd microservices/EnergyAnalytics	
+mvn clean
+cd ../..
+
 cd microservices/Prosumer	
 mvn clean
 cd ../..

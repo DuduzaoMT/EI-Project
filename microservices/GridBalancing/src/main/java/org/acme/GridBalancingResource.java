@@ -92,7 +92,7 @@ public class GridBalancingResource {
     @Path("{id}")
     public Uni<Response> getSingle(Long id) {
         return GridBalancing.findById(client, id)
-                .onItem().transform(flexEvent -> flexEvent != null ? Response.ok(flexEvent) : Response.status(Response.Status.NOT_FOUND)) 
+                .onItem().transform(gridEvent -> gridEvent != null ? Response.ok(gridEvent) : Response.status(Response.Status.NOT_FOUND)) 
                 .onItem().transform(ResponseBuilder::build); 
     }
 }

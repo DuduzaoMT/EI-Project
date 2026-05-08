@@ -23,6 +23,7 @@
    - Quarkus-Terraform/utilityoperator/EC2InstallQuarkus.tf
    - Quarkus-Terraform/flexibilityEvent/EC2InstallQuarkus.tf
    - Quarkus-Terraform/gridBalancing/EC2InstallQuarkus.tf
+   - Quarkus-Terraform/energyAnalytics/EC2InstallQuarkus.tf
 
 3. **Kafka Setup:**
    - Wait for the deployment to finish.
@@ -31,7 +32,7 @@
      ```sh
      cd /path/to/kafka
      ```
-   - Create the topic:
+   - Create the topic (Only if you want to test telemetry):
 
      ```sh
      bin/kafka-topics.sh --create --topic 560987123-EDP --bootstrap-server localhost:9092

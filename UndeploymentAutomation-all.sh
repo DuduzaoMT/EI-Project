@@ -18,6 +18,11 @@ cd Quarkus-Terraform/gridBalancing
 terraform destroy -auto-approve
 cd ../..
 
+#Terraform - Quarkus energyAnalytics
+cd Quarkus-Terraform/energyAnalytics
+terraform destroy -auto-approve
+cd ../..
+
 # #Terraform - Quarkus prosumer
 cd Quarkus-Terraform/prosumer
 terraform destroy -auto-approve
