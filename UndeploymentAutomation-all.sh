@@ -8,6 +8,11 @@ cd Quarkus-Terraform/telemetry
 terraform destroy -auto-approve
 cd ../..
 
+#Terraform - Quarkus flexibilityEvent
+cd Quarkus-Terraform/flexibilityEvent
+terraform destroy -auto-approve
+cd ../..
+
 # #Terraform - Quarkus prosumer
 cd Quarkus-Terraform/prosumer
 terraform destroy -auto-approve

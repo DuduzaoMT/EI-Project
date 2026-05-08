@@ -21,6 +21,7 @@
    - Quarkus-Terraform/prosumer/EC2InstallQuarkus.tf
    - Quarkus-Terraform/telemetry/EC2InstallQuarkus.tf
    - Quarkus-Terraform/utilityoperator/EC2InstallQuarkus.tf
+   - Quarkus-Terraform/flexibilityEvent/EC2InstallQuarkus.tf
 
 3. **Kafka Setup:**
    - Wait for the deployment to finish.

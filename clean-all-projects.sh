@@ -4,6 +4,10 @@ cd microservices/Telemetry
 mvn clean
 cd ../..
 
+cd microservices/FlexibilityEvent	
+mvn clean
+cd ../..
+
 cd microservices/Prosumer	
 mvn clean
 cd ../..
