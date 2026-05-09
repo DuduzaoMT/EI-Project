@@ -24,6 +24,7 @@
    - Quarkus-Terraform/flexibilityEvent/EC2InstallQuarkus.tf
    - Quarkus-Terraform/gridBalancing/EC2InstallQuarkus.tf
    - Quarkus-Terraform/energyAnalytics/EC2InstallQuarkus.tf
+   - Quarkus-Terraform/artificialIntelligence/EC2OllamaConfiguration.tf
 
 3. **Kafka Setup:**
    - Wait for the deployment to finish.

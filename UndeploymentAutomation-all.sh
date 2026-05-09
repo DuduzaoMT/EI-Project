@@ -23,6 +23,11 @@ cd Quarkus-Terraform/energyAnalytics
 terraform destroy -auto-approve
 cd ../..
 
+#Terraform - Quarkus artificialIntelligence
+cd Quarkus-Terraform/artificialIntelligence
+terraform destroy -auto-approve
+cd ../..
+
 # #Terraform - Quarkus prosumer
 cd Quarkus-Terraform/prosumer
 terraform destroy -auto-approve

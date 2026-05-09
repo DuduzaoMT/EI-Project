@@ -16,6 +16,10 @@ cd microservices/EnergyAnalytics
 mvn clean
 cd ../..
 
+cd microservices/ArtificialIntelligence	
+mvn clean
+cd ../..
+
 cd microservices/Prosumer	
 mvn clean
 cd ../..

@@ -80,6 +80,14 @@ cd Quarkus-Terraform/energyAnalytics
 DeployMicroservice
 
 
+cd microservices/ArtificialIntelligence/src/main/resources
+sed -i "/kafka.bootstrap.servers/d" application.properties
+echo "kafka.bootstrap.servers=$addresskafka:9092" >> application.properties
+CompileCode
+cd Quarkus-Terraform/artificialIntelligence
+DeployMicroservice
+
+
 cd microservices/AssetLink/src/main/resources
 CompileCode
 cd Quarkus-Terraform/assetlink
@@ -147,6 +155,14 @@ cd ../..
 
 cd Quarkus-Terraform/energyAnalytics
 echo "MICROSERVICE EnergyAnalytics IS AVAILABLE HERE:"
+addressMS="$(terraform state show aws_instance.exampleDeployQuarkus |grep public_dns | sed "s/public_dns//g" | sed "s/=//g" | sed "s/\"//g" |sed "s/ //g" | sed "s/$esc\[[0-9;]*m//g" )"
+echo "http://"$addressMS":8080/q/swagger-ui/"
+echo
+cd ../..
+
+
+cd Quarkus-Terraform/artificialIntelligence
+echo "MICROSERVICE ArtificialIntelligence IS AVAILABLE HERE:"
 addressMS="$(terraform state show aws_instance.exampleDeployQuarkus |grep public_dns | sed "s/public_dns//g" | sed "s/=//g" | sed "s/\"//g" |sed "s/ //g" | sed "s/$esc\[[0-9;]*m//g" )"
 echo "http://"$addressMS":8080/q/swagger-ui/"
 echo
