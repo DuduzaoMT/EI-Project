@@ -1,0 +1,58 @@
+@startuml
+skinparam sequenceArrowThickness 1.5
+skinparam roundcorner 8
+skinparam BoxPadding 12
+skinparam backgroundColor white
+skinparam SequenceGroupBodyBackgroundColor #F5F5F5
+
+title D1 - Asset Registration, Asset Link Activation and Telemetry Ingestion
+
+actor Prosumer as P
+participant "Prosumer MS\nentity: Prosumer" as PMS
+participant "UtilityOperator MS\nentity: UtilityOperator\n+ GridCell" as UMS
+participant "AssetLink MS\nentity: AssetLink" as AMS
+participant "Kafka 4.1.1\n(KRaft, EC2:9092)" as K
+participant "Telemetry MS\nentity: TelemetryEvent" as TMS
+database "AWS RDS" as DB
+
+== 1. Prosumer Registration ==
+P -> PMS : POST /prosumers\n{name, fiscalId, location, paymentDetails}
+PMS -> DB : INSERT prosumer
+PMS --> P : 201 {prosumerId}
+note right of PMS : Internal logic on Prosumer entity:\nGET /prosumers/{id}\nGET /prosumers?gridCellId=X\nGET /prosumers/{id}/assets
+
+== 2. UtilityOperator Registration ==
+P -> UMS : POST /utilityoperators\n{name, fiscalId, location}
+UMS -> DB : INSERT utility_operator
+UMS -> DB : INSERT grid_cell\n{gridCellId, maxCapacityKw, safetyThreshold}
+UMS --> P : 201 {utilityOperatorId}
+note right of UMS : Internal logic on UtilityOperator entity:\nGET /gridcells/{id}\nGET /gridcells?zone=X\nPUT /gridcells/{id}/threshold
+
+== 3. Asset Link Activation (Sprint 1: direct | Sprint 2: Camunda orchestrates) ==
+P -> AMS : POST /assetlinks\n{prosumerId, assetId, utilityOperatorId}
+AMS -> DB : INSERT asset_link (status=ACTIVE)
+note right of AMS : Internal logic on AssetLink entity:\nGET /assetlinks/{id}\nGET /assetlinks?prosumerId=X\nGET /assetlinks?status=ACTIVE\nDELETE /assetlinks/{id} (deactivate)
+
+AMS -> K : AdminClient.createTopics()\nNewTopic("{assetLinkId}-{utilityOpId}",\npartitions=1, replication=1)
+AMS -> TMS : POST /CreateaTopicConsumer\n{topicName: "{assetLinkId}-{utilityOpId}"}
+TMS -> TMS : new DynamicTopicConsumer(\n  topic, kafka.bootstrap.servers).start()
+TMS --> AMS : 200 OK
+AMS --> P : 201 {assetLinkId}
+
+== 4. Telemetry Ingestion (continuous polling loop) ==
+[-> K : VPPaaS Simulator publishes\nBESS/Solar/EV JSON events\ntopic: {assetLinkId}-{utilityOpId}
+K --> TMS : consumer.poll(100ms)
+TMS -> DB : INSERT telemetry_event\n(asset_id, asset_type, grid_cell_id,\nsoc_percent, active_power_kw,\nenergy_available_kwh, timestamp)
+note right of TMS : Internal logic on TelemetryEvent entity:\nGET /telemetry/latest?gridCellId=X\nGET /telemetry/history?assetId=X\nGET /telemetry/stats?gridCellId=X\n(min/max/avg soc_percent, active_power_kw)
+
+
+== 5. Asset Link Deactivation (prevents Zombie Assets) ==
+P -> AMS : DELETE /assetlinks/{assetLinkId}
+AMS -> DB : UPDATE asset_link (status=INACTIVE)
+AMS -> TMS : POST /StopTopicConsumer\n{topicName: "{assetLinkId}-{utilityOpId}"}
+TMS -> TMS : DynamicTopicConsumer.stop()
+TMS --> AMS : 200 OK
+AMS -> K : AdminClient.deleteTopics()\n("{assetLinkId}-{utilityOpId}")
+AMS --> P : 200 OK
+
+@enduml

@@ -1,0 +1,56 @@
+@startuml
+skinparam sequenceArrowThickness 1.5
+skinparam roundcorner 8
+skinparam BoxPadding 12
+skinparam backgroundColor white
+skinparam SequenceGroupBodyBackgroundColor #F5F5F5
+skinparam ParticipantPadding 40
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 120
+skinparam sequenceArrowFontSize 11
+skinparam ParticipantFontSize 12
+skinparam sequenceParticipantBorderThickness 1.5
+
+title D5 - Flexibility Forecasting (AI / Ollama)\nextension of Flexibility MS
+
+participant "Camunda\n(Sprint 2)" as CAM
+participant "Telemetry\nMS" as TMS
+participant "Flexibility MS\nentity: FlexibilityEvent" as FEM
+database "AWS RDS\n(Flexibility MS)" as DB
+participant "Ollama LLM\n(AWS EC2\nport 11434)" as AI
+participant "Kafka\n4.1.1" as K
+
+note over CAM,TMS
+Sprint 1: direct REST call
+Sprint 2: Camunda via Kong REST Connector
+Ollama is an internal extension — no separate MS,
+no separate RDS, no separate Kafka topic
+end note
+
+== Cross-entity logic (Camunda responsibility) ==
+
+CAM -> TMS : GET /telemetry/history\n?gridCellId=X&limit=100
+TMS --> CAM : [historical telemetry records\nwith soc_percent, active_power_kw...]
+
+CAM -> FEM : POST /flexibility-events/forecast\n{gridCellId, telemetryLogs}
+
+== Flexibility MS: internal AI-extended logic ==
+
+FEM -> DB : SELECT past_flexibility_events\nWHERE status IN (EXECUTED, FAILED)\nORDER BY timestamp DESC LIMIT 100
+DB --> FEM : [past event logs\nwith offerType, result, timestamp]
+
+FEM -> AI : POST /api/generate\n{model: "llama3",\nstream: false,\nprompt: "Analyse flexibility logs.\nRate grid success 0.0 to 1.0.\nIdentify key patterns."}
+
+AI --> FEM : {response: "POSITIVE sentiment.\nSuccess rate: 0.82.\nPattern: SoC>90% discharge\nduring peak hours effective.",\ndone: true}
+
+FEM -> FEM : Parse AI response\nExtract success_rate,\nsentiment, aiPattern
+
+== Persist and publish (same RDS and topic as D2) ==
+
+FEM -> DB : INSERT flexibility_event\n{offerType: AI_DISCHARGE,\nsentiment: POSITIVE,\nsuccessRate: 0.82,\naiPattern: "SoC>90% peak",\ntimestamp: now()}
+
+FEM -> K : produce to Flexibility Event topic\n{offerType: AI_DISCHARGE,\nsuccessRate: 0.82,\naiPattern: "SoC>90% peak"}
+
+FEM --> CAM : 201 Created\n{flexibilityEventId}
+
+@enduml

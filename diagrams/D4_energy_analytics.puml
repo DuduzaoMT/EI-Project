@@ -1,0 +1,47 @@
+@startuml
+skinparam sequenceArrowThickness 1.5
+skinparam roundcorner 8
+skinparam BoxPadding 12
+skinparam backgroundColor white
+skinparam SequenceGroupBodyBackgroundColor #F5F5F5
+
+title D4 - Energy Analytics\nentity owner: EnergyAnalytics
+
+participant "Camunda\n(Sprint 2)" as CAM
+participant "Telemetry MS\nentity: TelemetryEvent" as TMS
+participant "Prosumer MS\nentity: Prosumer" as PMS
+participant "UtilityOperator MS\nentity: UtilityOperator" as UMS
+participant "Energy\nAnalytics MS\nentity: EnergyAnalytics" as EAM
+participant "Kafka 4.1.1" as K
+database "AWS RDS" as DB
+
+note over CAM,EAM : Sprint 1: REST call direct to Energy Analytics MS\nSprint 2: Camunda process EnergyAnalytics\norchestrates calls via Kong REST Connector
+
+== Business process: cross-entity logic (Camunda responsibility) ==
+CAM -> TMS : GET /telemetry/history?period=X
+TMS --> CAM : [telemetry records]
+
+CAM -> PMS : GET /prosumers?gridCellId=X
+PMS --> CAM : [{prosumerId, assetId}]
+
+CAM -> UMS : GET /gridcells
+UMS --> CAM : [{gridCellId, maxCapacityKw}]
+
+CAM -> EAM : POST /energy-analytics\n{period, telemetryData,\nprosumersData, gridCellsData}
+
+== Energy Analytics MS: internal logic on EnergyAnalytics entity ==
+EAM -> EAM : Compute (own entity rules):\n- Energy Discharged by Zone\n- Generated Energy by Prosumer\n- Consumed Energy by Prosumer\n- Average SoC
+
+EAM -> DB : UPSERT energy_analytics\n{period, gridCellId, prosumerId, metrics}
+
+EAM -> K : produce to EnergyDischargedByZone\n{gridCellId, energyKwh, period}
+EAM -> K : produce to GeneratedEnergyByProsumer\n{prosumerId, energyKwh, period}
+EAM -> K : produce to ConsumedEnergyByProsumer\n{prosumerId, energyKwh, period}
+EAM -> K : produce to AverageSoC\n{gridCellId, avgSocPercent, period}
+
+EAM --> CAM : 201 {analyticsId}
+
+== Internal endpoints on EnergyAnalytics entity ==
+note over EAM : GET /energy-analytics?gridCellId=X&period=Y\nGET /energy-analytics/stats\n(min/max/avg per zone and prosumer)\nGET /energy-analytics/trends?prosumerId=X
+
+@enduml

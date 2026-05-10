@@ -1,0 +1,42 @@
+@startuml
+skinparam sequenceArrowThickness 1.5
+skinparam roundcorner 8
+skinparam BoxPadding 12
+skinparam backgroundColor white
+skinparam SequenceGroupBodyBackgroundColor #F5F5F5
+
+title D2 - Flexibility Emission\nentity owner: FlexibilityEvent
+
+participant "Camunda\n(Sprint 2)" as CAM
+participant "Telemetry MS\nentity: TelemetryEvent" as TMS
+participant "Prosumer MS\nentity: Prosumer" as PMS
+participant "Flexibility\nEmission MS\nentity: FlexibilityEvent" as FEM
+participant "Kafka 4.1.1" as K
+database "AWS RDS" as DB
+
+note over CAM,FEM : Sprint 1: REST call direct to Flexibility MS\nSprint 2: Camunda process FlexibilityEventEmission\norchestrates calls via Kong REST Connector
+
+== Business process: cross-entity logic (Camunda responsibility) ==
+CAM -> TMS : GET /telemetry/latest?gridCellId=X
+TMS --> CAM : [{asset_id, soc_percent, active_power_kw}]
+
+CAM -> PMS : GET /prosumers?gridCellId=X
+PMS --> CAM : [{prosumerId, paymentDetails}]
+
+CAM -> FEM : POST /flexibility-events\n{assetId, prosumerId, gridCellId,\nmarketPrice, socPercent}
+
+== Flexibility MS: internal logic on FlexibilityEvent entity ==
+FEM -> FEM : Arbitrage Logic (own entity rule):\nIF socPercent > 90%\nAND marketPrice == HIGH\n-> offerType = SELL
+FEM -> FEM : Balancing Logic (own entity rule):\nIF socPercent < 20%\n-> status = UNAVAILABLE
+FEM -> FEM : OTHER:\nofferType = DISCHARGE_INCENTIVE
+
+FEM -> DB : INSERT flexibility_event\n{assetId, prosumerId, offerType,\nincentive, status, timestamp}
+
+FEM -> K : produce to Flexibility Event topic\n{assetId, prosumerId, offerType,\nincentive, timestamp}
+
+FEM --> CAM : 201 {flexibilityEventId}
+
+== Internal endpoints on FlexibilityEvent entity ==
+note over FEM : GET /flexibility-events/{id}\nGET /flexibility-events?status=EXECUTED\nGET /flexibility-events?gridCellId=X\nGET /flexibility-events/stats\n(avg incentive, success rate, count by type)
+
+@enduml

@@ -1,0 +1,48 @@
+@startuml
+skinparam sequenceArrowThickness 1.5
+skinparam roundcorner 8
+skinparam BoxPadding 12
+skinparam backgroundColor white
+skinparam SequenceGroupBodyBackgroundColor #F5F5F5
+
+title D3 - Grid Balancing Recommendation\nentity owner: BalancingRecommendation
+
+participant "Camunda\n(Sprint 2)" as CAM
+participant "Telemetry MS\nentity: TelemetryEvent" as TMS
+participant "UtilityOperator MS\nentity: UtilityOperator\n+ GridCell" as UMS
+participant "AssetLink MS\nentity: AssetLink" as AMS
+participant "Prosumer MS\nentity: Prosumer" as PMS
+participant "Grid Balancing MS\nentity: BalancingRec." as GBM
+participant "Kafka 4.1.1" as K
+database "AWS RDS" as DB
+
+note over CAM,GBM : Sprint 1: REST call direct to Grid Balancing MS\nSprint 2: Camunda process GridBalancingRecommendation\norchestrates calls via Kong REST Connector
+
+== Business process: cross-entity logic (Camunda responsibility) ==
+CAM -> UMS : GET /gridcells (all zones + safetyThreshold)
+UMS --> CAM : [{gridCellId, safetyThreshold, maxCapacityKw}]
+
+CAM -> TMS : GET /telemetry/stats?groupBy=gridCellId
+TMS --> CAM : [{gridCellId, totalPowerKw, avgSoc}]
+
+CAM -> AMS : GET /assetlinks/active?groupBy=gridCellId
+AMS --> CAM : [{gridCellId, activeAssets}]
+
+CAM -> PMS : GET /prosumers?gridCellId=X
+PMS --> CAM : [{prosumerId, assetId, paymentDetails}]
+
+CAM -> GBM : POST /balancing-recommendations\n{zonesData: [{gridCellId,\ntotalPowerKw, avgSoc, safetyThreshold}],\nprosumersData: [{prosumerId, assetId}]}
+
+== Grid Balancing MS: internal logic on BalancingRecommendation entity ==
+GBM -> GBM : FOR each zone (own entity rule):\nIF totalPowerKw > safetyThreshold\n-> Zone = DEFICIT\nIF avgSoc > surplusThreshold\n-> Zone = SURPLUS\nIF DEFICIT zone AND SURPLUS zone found\n-> create BalancingRecommendation
+
+GBM -> DB : INSERT balancing_recommendation\n{fromZone, toZone, mwToShift,\nurgency, status, timestamp}
+
+GBM -> K : produce to\nGridBalancingRecommendation\n{fromZone, toZone,\nmwToShift, urgency}
+
+GBM --> CAM : 201 {recommendationId}
+
+== Internal endpoints on BalancingRecommendation entity ==
+note over GBM : GET /balancing-recommendations/{id}\nGET /balancing-recommendations?status=PENDING
+
+@enduml

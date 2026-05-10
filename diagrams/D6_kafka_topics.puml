@@ -1,0 +1,57 @@
+@startuml
+skinparam componentStyle rectangle
+skinparam roundcorner 8
+skinparam backgroundColor white
+skinparam ArrowThickness 2
+skinparam ComponentFontSize 18
+skinparam ComponentPadding 24
+skinparam RectanglePadding 28
+skinparam defaultTextAlignment center
+skinparam RectangleFontSize 20
+skinparam QueueFontSize 16
+skinparam ArrowFontSize 14
+skinparam Padding 16
+
+title D6 - Kafka Topics and Partitions Overview\n(Kafka 4.1.1 KRaft, AWS EC2:9092)
+
+rectangle "Kafka Producers" as PROD {
+  [AssetLink MS\n(AdminClient API)] as AMS_P
+  [VPPaaS Event\nSimulator] as SIM
+  [Flexibility\nEmission MS] as FEM_P
+  [Grid\nBalancing MS] as GBM_P
+  [Energy\nAnalytics MS] as EAM_P
+}
+
+rectangle "Kafka 4.1.1 KRaft (AWS EC2:9092)" as KAFKA {
+  queue "T1: {assetLinkId}-{utilityOpId}\n1 partition, replication=1\ncreated on AssetLink activation\n(only dynamic topic)" as T1
+  queue "T2: Flexibility Event\n(rule-based D2\n+ AI-extended D5)" as T2
+  queue "T3: GridBalancing\nRecommendation" as T3
+  queue "T4: EnergyDischarged\nByZone" as T4
+  queue "T5: GeneratedEnergy\nByProsumer" as T5
+  queue "T6: ConsumedEnergy\nByProsumer" as T6
+  queue "T7: AverageSoC" as T7
+}
+
+rectangle "Kafka Consumers" as CONS {
+  [Telemetry MS\n(DynamicTopicConsumer\nThread — one per\nactive AssetLink)] as TMS_C
+  [Dashboard /\nExternal Systems] as DASH
+}
+
+AMS_P -down-> T1 : AdminClient.createTopics()
+SIM -down-> T1 : telemetry events
+FEM_P -down-> T2
+GBM_P -down-> T3
+EAM_P -down-> T4
+EAM_P -down-> T5
+EAM_P -down-> T6
+EAM_P -down-> T7
+
+T1 -down-> TMS_C : DynamicTopicConsumer Thread
+T2 -down-> DASH
+T3 -down-> DASH
+T4 -down-> DASH
+T5 -down-> DASH
+T6 -down-> DASH
+T7 -down-> DASH
+
+@enduml
