@@ -110,4 +110,21 @@ public class Telemetry
                 .onItem().transform(iterator -> iterator.hasNext() ? from(iterator.next()) : null); 
     }
 
+    public static Multi<Telemetry> findByAssetId(MySQLPool client, String assetId) {
+        try {
+            Long assetIdLong = Long.parseLong(assetId);
+            return client.preparedQuery("SELECT * FROM Telemetry WHERE asset_id = ? ORDER BY timeStamp DESC").execute(Tuple.of(assetIdLong))
+                    .onItem().transformToMulti(set -> Multi.createFrom().iterable(set))
+                    .onItem().transform(Telemetry::from);
+        } catch (NumberFormatException e) {
+            return Multi.createFrom().empty();
+        }
+    }
+
+    public static Multi<Telemetry> findByGridCellId(MySQLPool client, String gridCellId) {
+        return client.preparedQuery("SELECT * FROM Telemetry WHERE grid_cell_id = ? ORDER BY timeStamp DESC").execute(Tuple.of(gridCellId))
+                .onItem().transformToMulti(set -> Multi.createFrom().iterable(set))
+                .onItem().transform(Telemetry::from);
+    }
+
 }

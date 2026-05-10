@@ -5,6 +5,7 @@ import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
+import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
@@ -80,6 +81,18 @@ public class KafkaProvisioningResource {
         return Telemetry.findById(client, id)
                 .onItem().transform(telemetry -> telemetry != null ? Response.ok(telemetry) : Response.status(Response.Status.NOT_FOUND)) 
                 .onItem().transform(ResponseBuilder::build); 
+    }
+    
+    @GET
+    @Path("asset/{assetId}")
+    public Multi<Telemetry> getByAsset(@PathParam("assetId") String assetId) {
+        return Telemetry.findByAssetId(client, assetId);
+    }
+
+    @GET
+    @Path("grid/{gridCellId}")
+    public Multi<Telemetry> getByGrid(@PathParam("gridCellId") String gridCellId) {
+        return Telemetry.findByGridCellId(client, gridCellId);
     }
 
 }

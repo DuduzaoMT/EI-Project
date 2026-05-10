@@ -30,12 +30,13 @@ public class ProsumerResource {
     
     private void initdb() {
         // In a production environment this configuration SHOULD NOT be used
-        client.query("DROP TABLE IF EXISTS Prosumer").execute()
+        client.query("DROP TABLE IF EXISTS Asset").execute()
+        .flatMap(r -> client.query("DROP TABLE IF EXISTS Prosumer").execute())
         .flatMap(r -> client.query("CREATE TABLE Prosumer (id SERIAL PRIMARY KEY, name TEXT NOT NULL, FiscalNumber BIGINT UNSIGNED, location TEXT NOT NULL)").execute())
+        .flatMap(r -> client.query("CREATE TABLE Asset (id SERIAL PRIMARY KEY, prosumer_id BIGINT UNSIGNED, asset_id TEXT NOT NULL, asset_type TEXT NOT NULL, max_capacity_kw FLOAT)").execute())
         .flatMap(r -> client.query("INSERT INTO Prosumer (name,FiscalNumber,location) VALUES ('client1','123456','Lisbon')").execute())
-        .flatMap(r -> client.query("INSERT INTO Prosumer (name,FiscalNumber,location) VALUES ('client2','987654','Setúbal')").execute())
-        .flatMap(r -> client.query("INSERT INTO Prosumer (name,FiscalNumber,location) VALUES ('client3','123987','OPorto')").execute())
-        .flatMap(r -> client.query("INSERT INTO Prosumer (name,FiscalNumber,location) VALUES ('client4','987123','Faro')").execute())
+        .flatMap(r -> client.query("INSERT INTO Asset (prosumer_id, asset_id, asset_type, max_capacity_kw) VALUES (1, 'BATT-001', 'BATTERY', 10.5)").execute())
+        .flatMap(r -> client.query("INSERT INTO Asset (prosumer_id, asset_id, asset_type, max_capacity_kw) VALUES (1, 'SOLAR-001', 'SOLAR', NULL)").execute())
         .await().indefinitely();
     }
     
@@ -74,5 +75,27 @@ public class ProsumerResource {
                 .onItem().transform(updated -> updated ? Response.Status.NO_CONTENT : Response.Status.NOT_FOUND)
                 .onItem().transform(status -> Response.status(status).build());
     }
-    
+
+    @POST
+    @Path("{prosumerId}/assets")
+    public Uni<Response> createAsset(@PathParam("prosumerId") Long prosumerId, Asset asset) {
+        asset.prosumer_id = prosumerId;
+        return asset.save(client, asset.prosumer_id, asset.asset_id, asset.asset_type, asset.max_capacity_kw)
+                .onItem().transform(id -> URI.create("/Prosumer/" + prosumerId + "/assets/" + id))
+                .onItem().transform(uri -> Response.created(uri).build());
+    }
+
+    @GET
+    @Path("{prosumerId}/assets")
+    public Multi<Asset> getProsumerAssets(@PathParam("prosumerId") Long prosumerId) {
+        return Asset.findByProsumerId(client, prosumerId);
+    }
+
+    @DELETE
+    @Path("{prosumerId}/assets/{assetId}")
+    public Uni<Response> deleteAsset(@PathParam("prosumerId") Long prosumerId, @PathParam("assetId") Long assetId) {
+        return Asset.delete(client, assetId)
+                .onItem().transform(deleted -> deleted ? Response.Status.NO_CONTENT : Response.Status.NOT_FOUND)
+                .onItem().transform(status -> Response.status(status).build());
+    }  
 }

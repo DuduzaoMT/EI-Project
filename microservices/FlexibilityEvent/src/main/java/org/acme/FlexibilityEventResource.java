@@ -40,6 +40,7 @@ public class FlexibilityEventResource {
                 + "id SERIAL PRIMARY KEY, "
                 + "timestamp DATETIME NOT NULL, "
                 + "asset_id TEXT NOT NULL, "
+                + "prosumer_id BIGINT, "
                 + "grid_cell_id TEXT NOT NULL, "
                 + "logic_type TEXT NOT NULL, "
                 + "proposed_action TEXT NOT NULL, "
@@ -54,13 +55,13 @@ public class FlexibilityEventResource {
     @Path("Emit")
     public Uni<Response> emitEvent(FlexibilityEvent event) {
         event.timestamp = LocalDateTime.now();
-        event.status = "PENDING"; // 1. Começa como pendente
+        event.status = "PENDING";
 
         String insertQuery = String.format(
-            "INSERT INTO FlexibilityEvent (timestamp, asset_id, grid_cell_id, logic_type, proposed_action, incentive_value, target_value_kw, telemetry_reference_id, status) " +
-            "VALUES ('%s', '%s', '%s', '%s', '%s', %f, %f, %d, '%s')",
-            event.timestamp, event.asset_id, event.grid_cell_id, event.logic_type, event.proposed_action, 
-            event.incentive_value, event.target_value_kw, event.telemetry_reference_id, event.status
+            "INSERT INTO FlexibilityEvent (timestamp, asset_id, prosumer_id, grid_cell_id, logic_type, proposed_action, incentive_value, target_value_kw, telemetry_reference_id, status) " +
+            "VALUES ('%s', '%s', %s, '%s', '%s', '%s', %f, %f, %s, '%s')",
+            event.timestamp, event.asset_id, event.prosumer_id != null ? event.prosumer_id : "NULL", event.grid_cell_id, event.logic_type, event.proposed_action, 
+            event.incentive_value, event.target_value_kw, event.telemetry_reference_id != null ? event.telemetry_reference_id : "NULL", event.status
         );
 
         return client.query(insertQuery).execute()
@@ -72,6 +73,7 @@ public class FlexibilityEventResource {
                 kafkaMsg.put("event_id", insertedId);
                 kafkaMsg.put("action", event.proposed_action);
                 kafkaMsg.put("asset_id", event.asset_id);
+                kafkaMsg.put("prosumer_id", event.prosumer_id);
                 kafkaMsg.put("value_kw", event.target_value_kw);
                 
                 eventEmitter.send(kafkaMsg.toString());
@@ -98,5 +100,17 @@ public class FlexibilityEventResource {
         return FlexibilityEvent.findById(client, id)
                 .onItem().transform(flexEvent -> flexEvent != null ? Response.ok(flexEvent) : Response.status(Response.Status.NOT_FOUND)) 
                 .onItem().transform(ResponseBuilder::build); 
+    }
+
+    @GET
+    @Path("grid/{gridCellId}")
+    public Multi<FlexibilityEvent> getByGridCell(@PathParam("gridCellId") String gridCellId) {
+        return FlexibilityEvent.findByGridCellId(client, gridCellId);
+    }
+
+    @GET
+    @Path("status/{status}")
+    public Multi<FlexibilityEvent> getByStatus(@PathParam("status") String status) {
+        return FlexibilityEvent.findByStatus(client, status);
     }
 }

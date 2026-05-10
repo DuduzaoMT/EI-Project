@@ -95,4 +95,22 @@ public class GridBalancingResource {
                 .onItem().transform(gridEvent -> gridEvent != null ? Response.ok(gridEvent) : Response.status(Response.Status.NOT_FOUND)) 
                 .onItem().transform(ResponseBuilder::build); 
     }
+
+    @GET
+    @Path("source/{sourceGridCell}")
+    public Multi<GridBalancing> getBySourceGridCell(@PathParam("sourceGridCell") String sourceGridCell) {
+        return GridBalancing.findBySourceGridCell(client, sourceGridCell);
+    }
+
+    @GET
+    @Path("target/{targetGridCell}")
+    public Multi<GridBalancing> getByTargetGridCell(@PathParam("targetGridCell") String targetGridCell) {
+        return GridBalancing.findByTargetGridCell(client, targetGridCell);
+    }
+
+    @GET
+    @Path("status/{status}")
+    public Multi<GridBalancing> getByStatus(@PathParam("status") String status) {
+        return GridBalancing.findByStatus(client, status);
+    }
 }

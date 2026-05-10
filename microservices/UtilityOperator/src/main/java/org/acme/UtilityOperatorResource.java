@@ -30,12 +30,12 @@ public class UtilityOperatorResource {
     
     private void initdb() {
         // In a production environment this configuration SHOULD NOT be used
-        client.query("DROP TABLE IF EXISTS UtilityOperator").execute()
+        client.query("DROP TABLE IF EXISTS GridCell").execute()
+        .flatMap(r -> client.query("DROP TABLE IF EXISTS UtilityOperator").execute())
         .flatMap(r -> client.query("CREATE TABLE UtilityOperator (id SERIAL PRIMARY KEY, name TEXT NOT NULL, location TEXT NOT NULL)").execute())
+        .flatMap(r -> client.query("CREATE TABLE GridCell (id SERIAL PRIMARY KEY, operator_id BIGINT UNSIGNED, grid_cell_id TEXT NOT NULL, location TEXT NOT NULL, max_load_mw FLOAT)").execute())
         .flatMap(r -> client.query("INSERT INTO UtilityOperator (name,location) VALUES ('ArcoCegoLisbon','Lisboa')").execute())
-        .flatMap(r -> client.query("INSERT INTO UtilityOperator (name,location) VALUES ('PracadeBocage','Setubal')").execute())
-        .flatMap(r -> client.query("INSERT INTO UtilityOperator (name,location) VALUES ('PracadaBoavista','Porto')").execute())
-        .flatMap(r -> client.query("INSERT INTO UtilityOperator (name,location) VALUES ('PracaDomFranciscoGomes','Faro')").execute())
+        .flatMap(r -> client.query("INSERT INTO GridCell (operator_id, grid_cell_id, location, max_load_mw) VALUES (1, 'LISBON-DT', 'Lisbon Downtown', 50.0)").execute())
         .await().indefinitely();
     }
     
@@ -74,5 +74,40 @@ public class UtilityOperatorResource {
                 .onItem().transform(updated -> updated ? Response.Status.NO_CONTENT : Response.Status.NOT_FOUND)
                 .onItem().transform(status -> Response.status(status).build());
     }
+
+    // Criar uma nova GridCell para um Operator
+@POST
+@Path("{operatorId}/grid-cells")
+public Uni<Response> createGridCell(@PathParam("operatorId") Long operatorId, GridCell gridCell) {
+    gridCell.operator_id = operatorId;
+    return gridCell.save(client, gridCell.operator_id, gridCell.grid_cell_id, gridCell.location, gridCell.max_load_mw)
+            .onItem().transform(id -> URI.create("/UtilityOperator/" + operatorId + "/grid-cells/" + id))
+            .onItem().transform(uri -> Response.created(uri).build());
+}
+
+
+@GET
+@Path("{operatorId}/grid-cells")
+public Multi<GridCell> getOperatorGridCells(@PathParam("operatorId") Long operatorId) {
+    return GridCell.findByOperatorId(client, operatorId);
+}
+
+
+@PUT
+@Path("grid-cells/{id}/{maxLoadMw}")
+public Uni<Response> updateGridCellCapacity(@PathParam("id") Long id, @PathParam("maxLoadMw") Float maxLoadMw) {
+    return GridCell.updateCapacity(client, id, maxLoadMw)
+            .onItem().transform(updated -> updated ? Response.Status.NO_CONTENT : Response.Status.NOT_FOUND)
+            .onItem().transform(status -> Response.status(status).build());
+}
+
+
+@DELETE
+@Path("grid-cells/{id}")
+public Uni<Response> deleteGridCell(@PathParam("id") Long id) {
+    return GridCell.delete(client, id)
+            .onItem().transform(deleted -> deleted ? Response.Status.NO_CONTENT : Response.Status.NOT_FOUND)
+            .onItem().transform(status -> Response.status(status).build());
+}
     
 }

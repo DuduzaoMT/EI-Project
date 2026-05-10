@@ -63,4 +63,22 @@ public class GridBalancing {
                 .onItem().transform(RowSet::iterator)
                 .onItem().transform(iterator -> iterator.hasNext() ? from(iterator.next()) : null);
     }
+
+    public static Multi<GridBalancing> findBySourceGridCell(MySQLPool client, String sourceGridCell) {
+        return client.preparedQuery("SELECT * FROM GridBalancing WHERE source_grid_cell = ? ORDER BY timestamp DESC").execute(Tuple.of(sourceGridCell))
+                .onItem().transformToMulti(set -> Multi.createFrom().iterable(set))
+                .onItem().transform(GridBalancing::from);
+    }
+
+    public static Multi<GridBalancing> findByTargetGridCell(MySQLPool client, String targetGridCell) {
+        return client.preparedQuery("SELECT * FROM GridBalancing WHERE target_grid_cell = ? ORDER BY timestamp DESC").execute(Tuple.of(targetGridCell))
+                .onItem().transformToMulti(set -> Multi.createFrom().iterable(set))
+                .onItem().transform(GridBalancing::from);
+    }
+
+    public static Multi<GridBalancing> findByStatus(MySQLPool client, String status) {
+        return client.preparedQuery("SELECT * FROM GridBalancing WHERE status = ? ORDER BY timestamp DESC").execute(Tuple.of(status))
+                .onItem().transformToMulti(set -> Multi.createFrom().iterable(set))
+                .onItem().transform(GridBalancing::from);
+    }
 }
