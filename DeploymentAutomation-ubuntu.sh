@@ -134,58 +134,58 @@ cd ..
 
 cd Quarkus-Terraform/telemetry
 echo "MICROSERVICE telemetry IS AVAILABLE HERE:"
-addressMS="$(terraform state show aws_instance.exampleDeployQuarkus |grep public_dns | sed "s/public_dns//g" | sed "s/=//g" | sed "s/\"//g" |sed "s/ //g" | sed "s/$esc\[[0-9;]*m//g" )"
-echo "http://"$addressMS":8080/q/swagger-ui/"
+addressTelemetry="$(terraform state show aws_instance.exampleDeployQuarkus |grep public_dns | sed "s/public_dns//g" | sed "s/=//g" | sed "s/\"//g" |sed "s/ //g" | sed "s/$esc\[[0-9;]*m//g" )"
+echo "http://"$addressTelemetry":8080/q/swagger-ui/"
 echo
 cd ../..
 
 cd Quarkus-Terraform/flexibilityEvent
 echo "MICROSERVICE FlexibilityEvent IS AVAILABLE HERE:"
-addressMS="$(terraform state show aws_instance.exampleDeployQuarkus |grep public_dns | sed "s/public_dns//g" | sed "s/=//g" | sed "s/\"//g" |sed "s/ //g" | sed "s/$esc\[[0-9;]*m//g" )"
-echo "http://"$addressMS":8080/q/swagger-ui/"
+addressFlexibilityEvent="$(terraform state show aws_instance.exampleDeployQuarkus |grep public_dns | sed "s/public_dns//g" | sed "s/=//g" | sed "s/\"//g" |sed "s/ //g" | sed "s/$esc\[[0-9;]*m//g" )"
+echo "http://"$addressFlexibilityEvent":8080/q/swagger-ui/"
 echo
 cd ../..
 
 cd Quarkus-Terraform/gridBalancing
 echo "MICROSERVICE GridBalancing IS AVAILABLE HERE:"
-addressMS="$(terraform state show aws_instance.exampleDeployQuarkus |grep public_dns | sed "s/public_dns//g" | sed "s/=//g" | sed "s/\"//g" |sed "s/ //g" | sed "s/$esc\[[0-9;]*m//g" )"
-echo "http://"$addressMS":8080/q/swagger-ui/"
+addressGridBalancing="$(terraform state show aws_instance.exampleDeployQuarkus |grep public_dns | sed "s/public_dns//g" | sed "s/=//g" | sed "s/\"//g" |sed "s/ //g" | sed "s/$esc\[[0-9;]*m//g" )"
+echo "http://"$addressGridBalancing":8080/q/swagger-ui/"
 echo
 cd ../..
 
 cd Quarkus-Terraform/energyAnalytics
 echo "MICROSERVICE EnergyAnalytics IS AVAILABLE HERE:"
-addressMS="$(terraform state show aws_instance.exampleDeployQuarkus |grep public_dns | sed "s/public_dns//g" | sed "s/=//g" | sed "s/\"//g" |sed "s/ //g" | sed "s/$esc\[[0-9;]*m//g" )"
-echo "http://"$addressMS":8080/q/swagger-ui/"
+addressEnergyAnalytics="$(terraform state show aws_instance.exampleDeployQuarkus |grep public_dns | sed "s/public_dns//g" | sed "s/=//g" | sed "s/\"//g" |sed "s/ //g" | sed "s/$esc\[[0-9;]*m//g" )"
+echo "http://"$addressEnergyAnalytics":8080/q/swagger-ui/"
 echo
 cd ../..
 
 
 cd Quarkus-Terraform/artificialIntelligence
 echo "MICROSERVICE ArtificialIntelligence IS AVAILABLE HERE:"
-addressMS="$(terraform state show aws_instance.exampleDeployQuarkus |grep public_dns | sed "s/public_dns//g" | sed "s/=//g" | sed "s/\"//g" |sed "s/ //g" | sed "s/$esc\[[0-9;]*m//g" )"
-echo "http://"$addressMS":8080/q/swagger-ui/"
+addressArtificialIntelligence="$(terraform state show aws_instance.exampleDeployQuarkus |grep public_dns | sed "s/public_dns//g" | sed "s/=//g" | sed "s/\"//g" |sed "s/ //g" | sed "s/$esc\[[0-9;]*m//g" )"
+echo "http://"$addressArtificialIntelligence":8080/q/swagger-ui/"
 echo
 cd ../..
 
 cd Quarkus-Terraform/prosumer
 echo "MICROSERVICE prosumer IS AVAILABLE HERE:"
-addressMS="$(terraform state show aws_instance.exampleDeployQuarkus |grep public_dns | sed "s/public_dns//g" | sed "s/=//g" | sed "s/\"//g" |sed "s/ //g" | sed "s/$esc\[[0-9;]*m//g" )"
-echo "http://"$addressMS":8080/q/swagger-ui/"
+addressProsumer="$(terraform state show aws_instance.exampleDeployQuarkus |grep public_dns | sed "s/public_dns//g" | sed "s/=//g" | sed "s/\"//g" |sed "s/ //g" | sed "s/$esc\[[0-9;]*m//g" )"
+echo "http://"$addressProsumer":8080/q/swagger-ui/"
 echo
 cd ../..
 
 cd Quarkus-Terraform/utilityoperator
 echo "MICROSERVICE utilityoperator IS AVAILABLE HERE:"
-addressMS="$(terraform state show aws_instance.exampleDeployQuarkus |grep public_dns | sed "s/public_dns//g" | sed "s/=//g" | sed "s/\"//g" |sed "s/ //g" | sed "s/$esc\[[0-9;]*m//g" )"
-echo "http://"$addressMS":8080/q/swagger-ui/"
+addressUtilityOperator="$(terraform state show aws_instance.exampleDeployQuarkus |grep public_dns | sed "s/public_dns//g" | sed "s/=//g" | sed "s/\"//g" |sed "s/ //g" | sed "s/$esc\[[0-9;]*m//g" )"
+echo "http://"$addressUtilityOperator":8080/q/swagger-ui/"
 echo
 cd ../..
 
 cd Quarkus-Terraform/assetlink
 echo "MICROSERVICE assetlink IS AVAILABLE HERE:"
-addressMS="$(terraform state show aws_instance.exampleDeployQuarkus |grep public_dns | sed "s/public_dns//g" | sed "s/=//g" | sed "s/\"//g" |sed "s/ //g" | sed "s/$esc\[[0-9;]*m//g" )"
-echo "http://"$addressMS":8080/q/swagger-ui/"
+addressAssetLink="$(terraform state show aws_instance.exampleDeployQuarkus |grep public_dns | sed "s/public_dns//g" | sed "s/=//g" | sed "s/\"//g" |sed "s/ //g" | sed "s/$esc\[[0-9;]*m//g" )"
+echo "http://"$addressAssetLink":8080/q/swagger-ui/"
 echo
 cd ../..
 
@@ -208,6 +208,12 @@ cd KongaTerraform
 addressKonga="$(terraform state show aws_instance.exampleInstallKonga |grep public_dns | sed "s/public_dns//g" | sed "s/=//g" | sed "s/\"//g" |sed "s/ //g" | sed "s/$esc\[[0-9;]*m//g" )"
 echo "http://"$addressKonga":1337/"
 echo
+cd ..
+
+# Setup Kong Gateway with services and routes
+echo "Setting up Kong Gateway..."
+cd KongTerraform
+bash setup-kongGateway.sh "$addressKong" "$addressTelemetry" "$addressFlexibilityEvent" "$addressGridBalancing" "$addressEnergyAnalytics" "$addressArtificialIntelligence" "$addressProsumer" "$addressUtilityOperator" "$addressAssetLink"
 cd ..
 
 echo "Deploying all the Camunda forms..."
