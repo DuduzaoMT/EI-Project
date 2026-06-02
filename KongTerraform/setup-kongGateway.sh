@@ -71,6 +71,7 @@ register_service() {
     curl -s -X POST "http://$addressKong:8001/services/$service_name/routes" \
         --data "name=$route_name" \
         --data "paths=$route_path" \
+        --data "strip_path=false" \
         -H "Content-Type: application/x-www-form-urlencoded" > /dev/null
     
     if [ $? -eq 0 ]; then
@@ -84,7 +85,7 @@ register_service() {
 }
 
 # Main execution
-# # main() {
+main() {
     # Validate parameters
     if [ -z "$addressKong" ]; then
         echo -e "${RED}Error: Kong address not provided${NC}"
