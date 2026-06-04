@@ -71,7 +71,7 @@ register_service() {
     curl -s -X POST "http://$addressKong:8001/services/$service_name/routes" \
         --data "name=$route_name" \
         --data "paths=$route_path" \
-        --data "strip_path=false" \
+        --data "strip_path=true" \
         -H "Content-Type: application/x-www-form-urlencoded" > /dev/null
     
     if [ $? -eq 0 ]; then

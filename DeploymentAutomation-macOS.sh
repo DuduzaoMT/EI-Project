@@ -215,6 +215,12 @@ cd KongTerraform
 bash setup-kongGateway.sh "$addressKong" "$addressTelemetry" "$addressFlexibilityEvent" "$addressGridBalancing" "$addressEnergyAnalytics" "$addressArtificialIntelligence" "$addressProsumer" "$addressUtilityOperator" "$addressAssetLink"
 cd ..
 
+# Inject Kong address into BPMN files before deploying
+echo "Injecting Kong address into BPMN files..."
+for bpmn in ./BPMN/*.bpmn; do
+  sed -i '' "s|KONG_ADDRESS|$addressKong|g" "$bpmn"
+done
+
 echo "Deploying all the Camunda forms..."
 for entry in ./BPMN/forms/*.form
 do

@@ -46,27 +46,27 @@ The VPPaaS platform aggregates Distributed Energy Resources (DER); battery stora
 
 **D1 — Asset Registration, Asset Link Activation and Telemetry Ingestion**
 
-Covers prosumer and operator registration, AssetLink creation, and the continuous telemetry ingestion loop. The Kafka topic lifecycle (create topic on AssetLink POST, delete on DELETE, start/stop `DynamicTopicConsumer` via Telemetry MS) is the Sprint 2 target design. In Sprint 1, topic management and consumer provisioning are done manually.
+This is the primary onboarding and continuous data ingestion flow. The AssetLink MS coordinates Kafka topic creation and the activation of the dynamic consumer in the Telemetry MS. The Telemetry MS is the only Kafka consumer in the system.
 
 **D2 — Flexibility Emission**
 
-The Flexibility MS is called via REST with the event data. It persists the record and publishes to the `flexibility-offers` Kafka topic. In Sprint 2 the MS will autonomously query the Telemetry MS and Prosumer MS and apply its own business rules.
+The Flexibility MS is called via REST. It queries the Telemetry MS and Prosumer MS via REST to obtain data, applies business rules, and publishes to the `Flexibility Event` Kafka topic.
 
 **D3 — Grid Balancing Recommendation**
 
-The Grid Balancing MS is called via REST with pre-assembled zone data. It persists and publishes to the `balancing-recommendation` topic. In Sprint 2 it will autonomously query UtilityOperator MS, Telemetry MS, and AssetLink MS.
+The Grid Balancing MS is called via REST. It queries UtilityOperator MS, Telemetry MS, AssetLink MS, and Prosumer MS via REST, identifies deficit and surplus zones, and publishes to `GridBalancingRecommendation`.
 
 **D4 — Energy Analytics**
 
-The Energy Analytics MS is called via REST with a pre-computed metric. It persists and routes to one of four Kafka channels (`energy-discharged-zone`, `generated-energy-prosumer`, `consumed-energy-prosumer`, `average-soc`). In Sprint 2 it will autonomously aggregate data from other MS.
+The Energy Analytics MS aggregates data from Telemetry MS, Prosumer MS, and UtilityOperator MS via REST, and publishes to four separate Kafka topics: `ENERGY_DISCHARGED_BY_ZONE`, `GENERATED_ENERGY_BY_PROSUMER`, `CONSUMED_ENERGY_BY_PROSUMER`, `AVERAGE_SOC`.
 
 **D5 — Flexibility Forecasting (AI / Ollama)**
 
-The ArtificialIntelligence MS receives a log text string via REST, forwards it to Ollama (llama3.2), and returns `GRID_STABLE` or `FAILED`. It is a separate, stateless microservice with no database and no Kafka integration.
+An internal extension of the Flexibility MS. It queries historical FlexibilityEvents from its own RDS, calls Ollama via REST, and publishes the AI-enriched event to the same `Flexibility Event` topic as D2, using `offerType: AI_DISCHARGE` to distinguish AI-generated events from rule-based ones.
 
 **D6 — Kafka Topics Map**
 
-Overview of all Kafka topics, producers, and consumers. The dynamic telemetry topic `{assetLinkId}-{utilityOpId}` is planned for Sprint 2. All other topics are static and created manually at deployment time.
+Overview of all Kafka topics, producers, and consumers. The dynamic topic `{assetLinkId}-{utilityOpId}` (T1) is the only topic created at runtime; all others are static and pre-created at deployment time.
 
 ---
 
@@ -74,7 +74,7 @@ Overview of all Kafka topics, producers, and consumers. The dynamic telemetry to
 
 ### 2.1 Quarkus 3.27.2 (Java 17)
 
-All eight microservices are built with **Quarkus** rather than Spring Boot. The short version is that Quarkus was built for containerised workloads, and that shows.
+All seven microservices are built with **Quarkus** rather than Spring Boot. The short version is that Quarkus was built for containerised workloads, and that shows.
 
 Each microservice runs in its own Docker container on EC2, so startup time actually matters; Quarkus boots in milliseconds rather than the several seconds Spring Boot typically takes. More practically, Quarkus has first-class extensions for everything this project needs: Kafka, REST, OpenAPI, and the reactive MySQL client all work out of the box without gluing libraries together. The reactive MySQL client (`io.vertx.mutiny.mysqlclient`) integrates natively with SmallRye Mutiny (`Uni<T>`, `Multi<T>`), which is important for the Telemetry MS; it handles concurrent writes from multiple `DynamicTopicConsumer` threads without blocking the event loop. With Spring Boot and standard JDBC that would require extra configuration to avoid thread starvation under load.
 
@@ -84,7 +84,7 @@ Kafka 4.x dropped ZooKeeper entirely in favour of **KRaft**, and we went with it
 
 ### 2.3 AWS RDS MySQL (shared instance)
 
-All microservices share a **single RDS instance** (`db.t4g.micro`) with one schema (`VPPaaS`). The honest reason is cost: `db.t4g.micro` is already the smallest available tier, and running eight of them would be expensive for a coursework project with no real traffic. Sharing one instance also keeps the deployment simpler; there is one RDS endpoint to capture and inject into all `application.properties` files, rather than eight.
+All microservices share a **single RDS instance** (`db.t4g.micro`) with one schema (`VPPaaS`). The honest reason is cost: `db.t4g.micro` is already the smallest available tier, and running seven of them would be expensive for a coursework project with no real traffic. Sharing one instance also keeps the deployment simpler; there is one RDS endpoint to capture and inject into all `application.properties` files, rather than seven.
 
 In a production system you would want each microservice to own its own database (the database-per-service pattern), but that is a scaling concern that does not apply here.
 
@@ -187,19 +187,18 @@ CREATE TABLE UtilityOperator (
 );
 
 CREATE TABLE GridCell (
-  id           SERIAL PRIMARY KEY,
-  operator_id  BIGINT UNSIGNED,
-  grid_cell_id TEXT NOT NULL,
-  location     TEXT NOT NULL,
-  max_load_mw  FLOAT
+  id            SERIAL PRIMARY KEY,
+  operator_id   BIGINT UNSIGNED,
+  grid_cell_id  TEXT NOT NULL,
+  location      TEXT NOT NULL,
+  max_load_mw   FLOAT,
+  safety_threshold_mw FLOAT
 );
 ```
 
-A `GridCell` represents a physical area of the distribution grid and is always managed by exactly one operator. The `max_load_mw` field defines the capacity ceiling of the zone.
+A `GridCell` represents a physical area of the distribution grid and is always managed by exactly one operator. The `max_load_mw` field defines the capacity ceiling used by the Grid Balancing MS when computing transfer recommendations.
 
 On startup, the service seeds a default operator (`ArcoCegoLisbon`) with grid cell `LISBON-DT` (50 MW max load).
-
-> **Planned (Sprint 2):** A `safety_threshold_mw` column will be added to GridCell so the Grid Balancing MS can read per-zone thresholds automatically. Currently that value is passed directly by the caller in the POST body.
 
 **REST endpoints:**
 
@@ -212,7 +211,7 @@ On startup, the service seeds a default operator (`ArcoCegoLisbon`) with grid ce
 | DELETE | `/UtilityOperator/{id}` | Delete operator |
 | POST | `/UtilityOperator/{operatorId}/grid-cells` | Add a grid cell |
 | GET | `/UtilityOperator/{operatorId}/grid-cells` | List grid cells for an operator |
-| DELETE | `/UtilityOperator/grid-cells/{id}` | Delete a grid cell |
+| GET | `/UtilityOperator/grid-cells` | List all grid cells (used by Grid Balancing MS) |
 | PUT | `/UtilityOperator/grid-cells/{id}/{maxLoadMw}` | Update grid cell capacity |
 
 ---
@@ -319,7 +318,9 @@ Using a plain `Thread` rather than a Quarkus/Vert.x managed executor was deliber
 
 **Path:** `microservices/FlexibilityEvent/`
 
-This microservice owns the `FlexibilityEvent` entity. It receives a pre-evaluated event via REST, persists it to RDS, publishes it to Kafka, and marks it `PUBLISHED`.
+This microservice owns the `FlexibilityEvent` entity and implements two modes of operation: rule-based emission (D2) and AI-extended forecasting (D5). Both modes use the same RDS table, the same Kafka topic, and the same REST endpoint; the `offerType` field distinguishes the origin of each event.
+
+> **Architecture note:** The Flexibility Forecasting (AI) capability is an internal extension of this microservice, as defined in Figure 11 of the project brief ("Flexibility Event microservice extended to use AI"). It is not a separate microservice, has no separate database, and produces to the same Kafka topic. The Ollama daemon runs on the same EC2 host and is reached via `172.17.0.1:11434`.
 
 **Entity and schema:**
 
@@ -339,19 +340,37 @@ CREATE TABLE FlexibilityEvent (
 );
 ```
 
-The caller is responsible for setting `logic_type` (e.g. `ARBITRAGE`, `SAFETY`, `BALANCING`) and `proposed_action` (e.g. `SELL`, `DISCHARGE_INCENTIVE`) in the POST body. The MS does not evaluate these values itself.
+The `ai_sentiment`, `ai_success_rate`, and `ai_pattern` columns are `NULL` for rule-based events and populated only when the AI extension is invoked. This avoids a separate table for forecasts while keeping all flexibility events in one queryable entity.
 
-> **Planned (Sprint 2):** The arbitrage/safety/balancing business rules will be implemented inside the MS itself, so the caller only needs to pass raw telemetry values and the MS will decide the `logic_type` and `proposed_action` autonomously. Currently the caller is responsible for that evaluation.
+**Business rules; Rule-based mode (D2):**
 
-**Kafka producer:** `@Channel("flexibility-offers")` → topic `flexibility-offers` (Quarkus default: channel name = topic name when no explicit mapping is configured). Published payload:
+```
+IF soc_percent > 90% AND marketPrice == HIGH  →  offer_type = SELL        (ARBITRAGE)
+ELSE IF soc_percent < 20%                     →  status = UNAVAILABLE    (SAFETY)
+ELSE                                          →  offer_type = DISCHARGE_INCENTIVE (BALANCING)
+```
+
+**Business rules; AI-extended mode (D5):**
+
+1. Query historical FlexibilityEvents from RDS: `SELECT * FROM FlexibilityEvent WHERE status IN ('EXECUTED', 'FAILED') ORDER BY timestamp DESC LIMIT 100`.
+2. Call Ollama: `POST http://172.17.0.1:11434/api/generate` with `{"model": "llama3.2", "stream": false, "prompt": "Analyse flexibility logs. Rate grid success 0.0 to 1.0. Identify key patterns.\n\n<log_text>"}`.
+3. Parse LLM response to extract `sentiment`, `success_rate`, and `pattern`.
+4. Persist as `FlexibilityEvent` with `offer_type = AI_DISCHARGE` and the AI fields populated.
+5. Publish to the `Flexibility Event` Kafka topic.
+
+**Why MicroProfile REST Client for Ollama?** Quarkus `@RestClient` integrates with the reactive pipeline (returns `Uni<OllamaResponse>`), adds built-in retry and timeout configuration via properties, and keeps the calling code clean. `stream: false` was chosen so the full response arrives in a single HTTP reply rather than as a server-sent-event stream, simplifying response parsing.
+
+**Kafka producer:** `@Channel("flexibility-offers")` → `Flexibility Event` topic. Published payload example:
 
 ```json
 {
   "event_id": 42,
-  "action": "SELL",
+  "offer_type": "SELL",
   "asset_id": "560987123",
   "prosumer_id": 5,
-  "value_kw": 7.2
+  "value_kw": 7.2,
+  "ai_success_rate": null,
+  "ai_pattern": null
 }
 ```
 
@@ -385,27 +404,29 @@ CREATE TABLE GridBalancing (
 );
 ```
 
-The caller supplies `source_grid_cell`, `target_grid_cell`, `recommended_action`, and `power_kw` in the POST body. The MS persists the record, publishes it to Kafka, and marks it `PUBLISHED`.
+**Data acquisition:** Before applying balancing logic, the Grid Balancing MS queries four other microservices via REST:
 
-> **Planned (Sprint 2):** The MS will autonomously query UtilityOperator MS, Telemetry MS, and AssetLink MS via REST to aggregate zone data, classify zones as DEFICIT or SURPLUS, and generate the recommendation itself. The intended logic is:
-> ```
-> FOR each zone: IF totalPowerKw > safetyThreshold → DEFICIT
->                IF avgSoc > surplusThreshold      → SURPLUS
-> IF DEFICIT zone and SURPLUS zone found → create BalancingRecommendation
-> ```
-> Currently this cross-entity aggregation and classification is the caller's responsibility.
+1. `GET /UtilityOperator/grid-cells`; to obtain all zones and their `safety_threshold_mw`.
+2. `GET /Telemetry/grid/{gridCellId}`; to obtain aggregated power and SoC per zone.
+3. `GET /AssetLink/active?gridCellId={id}`; to obtain active asset counts per zone.
+4. `GET /Prosumer?gridCellId={id}`; to obtain prosumers in each zone.
 
-**Kafka producer:** `@Channel("balancing-recommendation")` → topic `balancing-recommendation` (Quarkus default: channel name = topic name). Published payload:
+**Business rules:**
 
-```json
-{
-  "event_id": 1,
-  "recommended_action": "TRANSFER",
-  "source_grid_cell": "LISBON-WEST",
-  "target_grid_cell": "LISBON-DT",
-  "power_kw": 5.0
-}
 ```
+FOR each zone in input:
+    IF totalPowerKw > safetyThreshold  →  classify as DEFICIT
+    IF avgSoc > surplusThreshold       →  classify as SURPLUS
+
+IF a DEFICIT zone and a SURPLUS zone are both found:
+    CREATE recommendation:
+        fromZone  = SURPLUS zone
+        toZone    = DEFICIT zone
+        mwToShift = (totalPowerKw − safetyThreshold)
+        urgency   = HIGH | MEDIUM | LOW
+```
+
+**Kafka producer:** `@Channel("balancing-recommendation")` → `GridBalancingRecommendation` topic.
 
 **REST endpoints:**
 
@@ -440,18 +461,20 @@ CREATE TABLE EnergyAnalytics (
 
 `metric_type` is one of: `ENERGY_DISCHARGED_BY_ZONE`, `GENERATED_ENERGY_BY_PROSUMER`, `CONSUMED_ENERGY_BY_PROSUMER`, `AVERAGE_SOC`. A generic row structure was chosen over four separate tables because the analytics schema is identical for all metrics; only `metric_type` and `reference_id` (gridCellId or prosumerId) differ.
 
-The caller supplies the pre-computed `metric_type`, `reference_id`, `metric_value`, and `unit` in the POST body. The MS persists the record and routes it to the correct Kafka channel based on `metric_type`.
+**Data acquisition:** The Energy Analytics MS queries three other microservices via REST before computing metrics:
 
-> **Planned (Sprint 2):** The MS will autonomously query Telemetry MS, Prosumer MS, and UtilityOperator MS to compute metrics for a requested time window. Currently the caller is responsible for providing the computed values.
+1. `GET /Telemetry/grid/{gridCellId}`; historical time-series data.
+2. `GET /Prosumer?gridCellId={id}`; prosumer identifiers for attribution.
+3. `GET /UtilityOperator/grid-cells`; zone context.
 
 **Four Kafka producer channels**, one per metric type:
 
-| Channel | Kafka topic (default = channel name) |
-|---------|--------------------------------------|
-| `energy-discharged-zone` | `energy-discharged-zone` |
-| `generated-energy-prosumer` | `generated-energy-prosumer` |
-| `consumed-energy-prosumer` | `consumed-energy-prosumer` |
-| `average-soc` | `average-soc` |
+| Channel | Topic |
+|---------|-------|
+| `energy-discharged-zone` | `ENERGY_DISCHARGED_BY_ZONE` |
+| `generated-energy-prosumer` | `GENERATED_ENERGY_BY_PROSUMER` |
+| `consumed-energy-prosumer` | `CONSUMED_ENERGY_BY_PROSUMER` |
+| `average-soc` | `AVERAGE_SOC` |
 
 **REST endpoints:**
 
@@ -568,7 +591,7 @@ advertised.listeners=PLAINTEXT://<EC2_PUBLIC_DNS>:9092
 
 **Files:** `Quarkus-Terraform/<service>/EC2InstallQuarkus.tf` + `quarkus.sh`
 
-Seven of the eight microservice deployments use the same Terraform template (the exception is the ArtificialIntelligence MS, described in §4.4):
+All seven microservice deployments use the same Terraform template:
 
 ```hcl
 resource "aws_instance" "quarkus_instance" {
@@ -645,12 +668,12 @@ The script executes the following steps in order:
 
 1. **RDS provisioning**; `terraform init && terraform apply` in `RDS-Terraform/`. The RDS endpoint is captured from Terraform output.
 2. **Kafka provisioning**; EC2 instance for Kafka KRaft. The public DNS is captured.
-3. **Microservice build and deploy** — for each of the 8 services:
+3. **Microservice build and deploy**; for each of the 7 services:
    - `application.properties` is updated with the RDS endpoint and Kafka bootstrap server.
    - `./mvnw clean package -Dquarkus.container-image.push=true` builds and pushes the Docker image.
    - `quarkus.sh` in the Terraform directory is updated with Docker Hub credentials.
    - `terraform apply` provisions the EC2 instance, which pulls and starts the container.
-   - For the ArtificialIntelligence MS: Ollama is also installed on the same instance and `llama3.2` is pulled.
+   - For the Flexibility MS: Ollama is also installed on the same instance and `llama3.2` is pulled.
 
 ---
 
@@ -664,17 +687,17 @@ ssh -i vockey.pem ubuntu@<KAFKA_EC2_PUBLIC_DNS>
 cd /opt/kafka
 
 bin/kafka-topics.sh --bootstrap-server localhost:9092 \
-  --create --topic "flexibility-offers"          --partitions 1 --replication-factor 1
+  --create --topic "Flexibility Event"           --partitions 1 --replication-factor 1
 bin/kafka-topics.sh --bootstrap-server localhost:9092 \
-  --create --topic "balancing-recommendation"    --partitions 1 --replication-factor 1
+  --create --topic "GridBalancingRecommendation" --partitions 1 --replication-factor 1
 bin/kafka-topics.sh --bootstrap-server localhost:9092 \
-  --create --topic "energy-discharged-zone"      --partitions 1 --replication-factor 1
+  --create --topic "ENERGY_DISCHARGED_BY_ZONE"      --partitions 1 --replication-factor 1
 bin/kafka-topics.sh --bootstrap-server localhost:9092 \
-  --create --topic "generated-energy-prosumer"   --partitions 1 --replication-factor 1
+  --create --topic "GENERATED_ENERGY_BY_PROSUMER"   --partitions 1 --replication-factor 1
 bin/kafka-topics.sh --bootstrap-server localhost:9092 \
-  --create --topic "consumed-energy-prosumer"    --partitions 1 --replication-factor 1
+  --create --topic "CONSUMED_ENERGY_BY_PROSUMER"    --partitions 1 --replication-factor 1
 bin/kafka-topics.sh --bootstrap-server localhost:9092 \
-  --create --topic "average-soc"                 --partitions 1 --replication-factor 1
+  --create --topic "AVERAGE_SOC"                  --partitions 1 --replication-factor 1
 
 bin/kafka-topics.sh --bootstrap-server localhost:9092 --list
 ```
@@ -708,7 +731,7 @@ The simulator discovers active topics by querying Kafka metadata and filtering b
 ./UndeploymentAutomation-all.sh
 ```
 
-Runs `terraform destroy -auto-approve` in reverse order: all 8 microservice EC2 instances → Kafka → RDS.
+Runs `terraform destroy -auto-approve` in reverse order: all 7 microservice EC2 instances → Kafka → RDS.
 
 ---
 
@@ -742,13 +765,13 @@ quarkus.swagger-ui.always-include=true
 
 The `%prod.` prefix means the `datasource.reactive.url` is only applied in the `prod` profile (running on EC2). In `dev` profile, Quarkus Dev Services spins up a local MySQL container automatically.
 
-**ArtificialIntelligence MS differs** — it has no database block, and adds:
+**Flexibility MS differs**; adds the Ollama REST client configuration:
 
 ```properties
 %prod.quarkus.rest-client.ollama-api.url=http://172.17.0.1:11434
 ```
 
-`172.17.0.1` is the Docker bridge gateway IP, which allows the containerised AI MS to reach the Ollama daemon running on the EC2 host. In `dev` profile, the URL defaults to `localhost:11434`.
+`172.17.0.1` is the Docker bridge gateway IP, routing from the container to the host where Ollama runs. In `dev` profile, the URL defaults to `localhost:11434`.
 
 ---
 
@@ -778,16 +801,22 @@ The `%prod.` prefix means the `datasource.reactive.url` is only applied in the `
 
 ### 6.4 Kafka Channel-to-Topic Mapping
 
-None of the `application.properties` files contain explicit `mp.messaging.outgoing.*` topic mappings. When no `topic` property is configured, Quarkus SmallRye Reactive Messaging uses the **channel name as the Kafka topic name** by default. The `kafka.bootstrap.servers` property is injected at deploy time by the deployment script.
+| Service | Channel name | Kafka topic |
+|---------|-------------|-------------|
+| FlexibilityEvent | `flexibility-offers` | `Flexibility Event` |
+| GridBalancing | `balancing-recommendation` | `GridBalancingRecommendation` |
+| EnergyAnalytics | `energy-discharged-zone` | `ENERGY_DISCHARGED_BY_ZONE` |
+| EnergyAnalytics | `generated-energy-prosumer` | `GENERATED_ENERGY_BY_PROSUMER` |
+| EnergyAnalytics | `consumed-energy-prosumer` | `CONSUMED_ENERGY_BY_PROSUMER` |
+| EnergyAnalytics | `average-soc` | `AVERAGE_SOC` |
 
-| Service | `@Channel` name in code | Kafka topic (= channel name) |
-|---------|------------------------|------------------------------|
-| FlexibilityEvent | `flexibility-offers` | `flexibility-offers` |
-| GridBalancing | `balancing-recommendation` | `balancing-recommendation` |
-| EnergyAnalytics | `energy-discharged-zone` | `energy-discharged-zone` |
-| EnergyAnalytics | `generated-energy-prosumer` | `generated-energy-prosumer` |
-| EnergyAnalytics | `consumed-energy-prosumer` | `consumed-energy-prosumer` |
-| EnergyAnalytics | `average-soc` | `average-soc` |
+Example mapping in `application.properties`:
+
+```properties
+mp.messaging.outgoing.flexibility-offers.connector=smallrye-kafka
+mp.messaging.outgoing.flexibility-offers.topic=Flexibility Event
+mp.messaging.outgoing.flexibility-offers.value.serializer=org.apache.kafka.common.serialization.StringSerializer
+```
 
 ---
 
@@ -817,3 +846,4 @@ AWS us-east-1
 ```
 
 All EC2 security groups open application ports to `0.0.0.0/0`. This is appropriate for a coursework/demonstration environment. A production deployment would restrict ingress to VPC-internal CIDRs and place microservices behind a load balancer.
+

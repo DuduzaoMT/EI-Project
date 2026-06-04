@@ -216,11 +216,17 @@ cd KongTerraform
 bash setup-kongGateway.sh "$addressKong" "$addressTelemetry" "$addressFlexibilityEvent" "$addressGridBalancing" "$addressEnergyAnalytics" "$addressArtificialIntelligence" "$addressProsumer" "$addressUtilityOperator" "$addressAssetLink"
 cd ..
 
+# Inject Kong address into BPMN files before deploying
+echo "Injecting Kong address into BPMN files..."
+for bpmn in ./BPMN/*.bpmn; do
+  sed -i "s|KONG_ADDRESS|$addressKong|g" "$bpmn"
+done
+
 echo "Deploying all the Camunda forms..."
 for entry in ./BPMN/forms/*.form
 do
   entry=${entry:2}
-  echo "$entry" 
+  echo "$entry"
   curl -L -X POST "http://$addressCamunda:8080/v2/deployments" \
   -H "Content-Type: multipart/form-data" \
   -H "Accept: application/json" \
@@ -231,7 +237,7 @@ echo "Deploying all the Camunda business processes..."
 for entry in ./BPMN/*.bpmn
 do
   entry=${entry:2}
-  echo "$entry" 
+  echo "$entry"
   curl -L -X POST "http://$addressCamunda:8080/v2/deployments" \
   -H "Content-Type: multipart/form-data" \
   -H "Accept: application/json" \
