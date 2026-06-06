@@ -23,6 +23,7 @@
       <bpmn:extensionElements>
         <zeebe:userTask />
         <zeebe:assignmentDefinition assignee="demo" />
+        <zeebe:formDefinition formId="Form_SelectZone_AI" />
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_AI_1</bpmn:incoming>
       <bpmn:outgoing>Flow_AI_2</bpmn:outgoing>

@@ -2,6 +2,7 @@ package org.acme;
 
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
+import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
@@ -14,12 +15,15 @@ import jakarta.ws.rs.core.Response.ResponseBuilder;
 import org.acme.model.Topic;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import java.net.URI;
+import java.util.concurrent.ConcurrentHashMap;
 import io.quarkus.runtime.StartupEvent;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 
 @Path("Telemetry")
 public class KafkaProvisioningResource {
+
+    private static final ConcurrentHashMap<String, DynamicTopicConsumer> activeConsumers = new ConcurrentHashMap<>();
 
         @Inject
     io.vertx.mutiny.mysqlclient.MySQLPool client;
@@ -64,10 +68,23 @@ public class KafkaProvisioningResource {
 
     @POST
     @Path("Consume")
-    public String ProvisioningConsumer(Topic topic) {
-        Thread worker = new DynamicTopicConsumer(topic.TopicName , kafka_servers , client);
+    public String provisioningConsumer(Topic topic) {
+        DynamicTopicConsumer worker = new DynamicTopicConsumer(topic.TopicName, kafka_servers, client);
+        activeConsumers.put(topic.TopicName, worker);
         worker.start();
         return "New worker started";
+    }
+
+    @DELETE
+    @Path("Consume/{topicName}")
+    public Response stopConsumer(@PathParam("topicName") String topicName) {
+        DynamicTopicConsumer worker = activeConsumers.remove(topicName);
+        if (worker == null) {
+            return Response.status(Response.Status.NOT_FOUND)
+                    .entity("No active consumer for topic: " + topicName).build();
+        }
+        worker.stopConsumer();
+        return Response.noContent().build();
     }
 
     @GET

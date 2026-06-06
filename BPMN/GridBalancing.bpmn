@@ -24,6 +24,7 @@
       <bpmn:extensionElements>
         <zeebe:userTask />
         <zeebe:assignmentDefinition assignee="demo" />
+        <zeebe:formDefinition formId="Form_SelectZone_GB" />
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_GB_1</bpmn:incoming>
       <bpmn:outgoing>Flow_GB_2</bpmn:outgoing>

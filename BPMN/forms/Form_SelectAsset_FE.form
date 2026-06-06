@@ -1,0 +1,33 @@
+{
+  "components": [
+    {
+      "label": "Asset ID",
+      "type": "textfield",
+      "layout": {
+        "row": "Row_1",
+        "columns": null
+      },
+      "id": "Field_assetId_FE",
+      "key": "assetId"
+    },
+    {
+      "label": "Grid Cell ID",
+      "type": "textfield",
+      "layout": {
+        "row": "Row_2",
+        "columns": null
+      },
+      "id": "Field_gridCellId_FE",
+      "key": "gridCellId"
+    }
+  ],
+  "type": "default",
+  "id": "Form_SelectAsset_FE",
+  "executionPlatform": "Camunda Cloud",
+  "executionPlatformVersion": "8.8.0",
+  "exporter": {
+    "name": "Camunda Modeler",
+    "version": "5.44.0"
+  },
+  "schemaVersion": 19
+}

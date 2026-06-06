@@ -52,10 +52,21 @@ public class AssetLink {
 					
 	    }
 
-	    public Uni<Boolean> save(MySQLPool client , Long idProsumer_R , Long idUtilityOperator_R) 
+	    public Uni<Long> save(MySQLPool client , Long idProsumer_R , Long idUtilityOperator_R)
 		{
 	        return client.preparedQuery("INSERT INTO AssetLink(idProsumer,idUtilityOperator) VALUES (?,?)").execute(Tuple.of( idProsumer_R , idUtilityOperator_R))
-	        		.onItem().transform(pgRowSet -> pgRowSet.rowCount() == 1 ); 
+	        		.onItem().transform(pgRowSet -> pgRowSet.property(io.vertx.mutiny.mysqlclient.MySQLClient.LAST_INSERTED_ID));
+	    }
+
+	    public static Multi<AssetLink> findByGridCell(MySQLPool client, String gridCellId) {
+	        return client.preparedQuery(
+	                "SELECT al.id, al.idProsumer, al.idUtilityOperator " +
+	                "FROM AssetLink al " +
+	                "JOIN GridCell gc ON al.idUtilityOperator = gc.operator_id " +
+	                "WHERE gc.grid_cell_id = ?")
+	                .execute(Tuple.of(gridCellId))
+	                .onItem().transformToMulti(set -> Multi.createFrom().iterable(set))
+	                .onItem().transform(AssetLink::from);
 	    }
 	    
 	    public static Uni<Boolean> delete(MySQLPool client, Long id_R) {

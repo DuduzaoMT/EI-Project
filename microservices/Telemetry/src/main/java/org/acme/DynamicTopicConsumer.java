@@ -15,6 +15,7 @@ import jakarta.inject.Inject;
 public class DynamicTopicConsumer extends Thread  {
     private String kafka_servers;
     private String topic;
+    private volatile boolean running = true;
 
      @Inject
     io.vertx.mutiny.mysqlclient.MySQLPool client;
@@ -40,7 +41,7 @@ public class DynamicTopicConsumer extends Thread  {
             try (Consumer<String, String> consumer = new KafkaConsumer<>(properties)) {
                 consumer.subscribe(Collections.singletonList(topic));
     
-                while (true) {
+                while (running) {
                     ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(100));
                     for (ConsumerRecord<String, String> record : records)
                     {
@@ -124,7 +125,15 @@ public class DynamicTopicConsumer extends Thread  {
                 }
             }    
         }
-        catch (Exception e) 
+        catch (Exception e)
 		{  System.out.println("Exception is caught:" + e);  }
+    }
+
+    public void stopConsumer() {
+        running = false;
+    }
+
+    public String getTopicName() {
+        return topic;
     }
 }

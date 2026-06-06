@@ -1,0 +1,23 @@
+{
+  "components": [
+    {
+      "label": "Grid Cell ID",
+      "type": "textfield",
+      "layout": {
+        "row": "Row_1",
+        "columns": null
+      },
+      "id": "Field_gridCellId_GB",
+      "key": "gridCellId"
+    }
+  ],
+  "type": "default",
+  "id": "Form_SelectZone_GB",
+  "executionPlatform": "Camunda Cloud",
+  "executionPlatformVersion": "8.8.0",
+  "exporter": {
+    "name": "Camunda Modeler",
+    "version": "5.44.0"
+  },
+  "schemaVersion": 19
+}

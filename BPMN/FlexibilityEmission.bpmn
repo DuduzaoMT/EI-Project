@@ -22,6 +22,7 @@
       <bpmn:extensionElements>
         <zeebe:userTask />
         <zeebe:assignmentDefinition assignee="demo" />
+        <zeebe:formDefinition formId="Form_SelectAsset_FE" />
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_FE_1</bpmn:incoming>
       <bpmn:outgoing>Flow_FE_2</bpmn:outgoing>
