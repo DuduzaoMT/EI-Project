@@ -78,6 +78,7 @@
     <bpmn:userTask id="Activity_56065da5-02bf-4be6-9684-e98578dbfd87" name="Promise Utility Operator Creation">
       <bpmn:extensionElements>
         <zeebe:userTask />
+        <zeebe:formDefinition formId="Form_Promise_UtilityOperatorMng" />
         <zeebe:assignmentDefinition assignee="demo" />
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_bb5888fa-09e6-4065-8708-c2edf6d189f5</bpmn:incoming>
@@ -86,6 +87,7 @@
     <bpmn:userTask id="Activity_054bedee-c253-41c5-a003-79b9fa25f3c9" name="Declare Utility Operator Creation">
       <bpmn:extensionElements>
         <zeebe:userTask />
+        <zeebe:formDefinition formId="Form_Promise_UtilityOperatorMng" />
         <zeebe:assignmentDefinition assignee="demo" />
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_5f1b9c96-06c8-492a-9c8b-6e03329d5a39</bpmn:incoming>
@@ -94,6 +96,7 @@
     <bpmn:userTask id="Activity_6b5bc8c9-ba4e-4be4-b899-ce9d1c93ccc9" name="Accept Utility Operator Creation">
       <bpmn:extensionElements>
         <zeebe:userTask />
+        <zeebe:formDefinition formId="Form_Productok_UtilityOperatorMng" />
         <zeebe:assignmentDefinition assignee="demo" />
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_988a5eb8-c97b-4b3c-8ddf-67ca83fec252</bpmn:incoming>
