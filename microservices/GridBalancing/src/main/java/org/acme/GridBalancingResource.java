@@ -13,6 +13,7 @@ import io.quarkus.runtime.StartupEvent;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import java.time.LocalDateTime;
+import java.util.Locale;
 import org.json.JSONObject;
 
 @Path("GridBalancing")
@@ -53,7 +54,7 @@ public class GridBalancingResource {
         event.timestamp = LocalDateTime.now();
         event.status = "PENDING";
 
-        String insertQuery = String.format(
+        String insertQuery = String.format(Locale.US,
             "INSERT INTO GridBalancing (timestamp, source_grid_cell, target_grid_cell, recommended_action, power_kw, status) " +
             "VALUES ('%s', '%s', '%s', '%s', %f, '%s')",
             event.timestamp, event.source_grid_cell, event.target_grid_cell, event.recommended_action, event.power_kw, event.status

@@ -13,10 +13,14 @@ import io.quarkus.runtime.StartupEvent;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import java.time.LocalDateTime;
+import java.util.Locale;
 import org.json.JSONObject;
 
 @Path("Flexibility")
 public class FlexibilityEventResource {
+
+    private static final float HIGH_SOC_THRESHOLD = 80.0f;
+    private static final float LOW_SOC_THRESHOLD = 20.0f;
 
     @Inject
     io.vertx.mutiny.mysqlclient.MySQLPool client;
@@ -57,7 +61,7 @@ public class FlexibilityEventResource {
         event.timestamp = LocalDateTime.now();
         event.status = "PENDING";
 
-        String insertQuery = String.format(
+        String insertQuery = String.format(Locale.US,
             "INSERT INTO FlexibilityEvent (timestamp, asset_id, prosumer_id, grid_cell_id, logic_type, proposed_action, incentive_value, target_value_kw, telemetry_reference_id, status) " +
             "VALUES ('%s', '%s', %s, '%s', '%s', '%s', %f, %f, %s, '%s')",
             event.timestamp, event.asset_id, event.prosumer_id != null ? event.prosumer_id : "NULL", event.grid_cell_id, event.logic_type, event.proposed_action, 
@@ -87,6 +91,41 @@ public class FlexibilityEventResource {
                         return Response.ok(event).status(Response.Status.CREATED).build();
                     });
             });
+    }
+
+    @POST
+    @Path("Evaluate")
+    public Response evaluateFlexibility(FlexibilityEvaluationRequest request) {
+        String evaluation;
+        String recommendedAction;
+        String reason;
+
+        if (request.socPercent != null && request.socPercent <= LOW_SOC_THRESHOLD) {
+            evaluation = "BALANCING_UNAVAILABLE";
+            recommendedAction = "UNAVAILABLE";
+            reason = "Asset state of charge is too low to participate in balancing actions.";
+        } else if (request.socPercent != null && request.socPercent >= HIGH_SOC_THRESHOLD
+                && "HIGH".equalsIgnoreCase(request.marketPrice)) {
+            evaluation = "ARBITRAGE_OPPORTUNITY";
+            recommendedAction = "SELL";
+            reason = "High state of charge combined with a high market price presents an arbitrage opportunity.";
+        } else {
+            evaluation = "EVALUATED_NO_ACTION";
+            recommendedAction = "NONE";
+            reason = "No actionable flexibility opportunity was identified for the current conditions.";
+        }
+
+        JSONObject result = new JSONObject();
+        result.put("assetId", request.assetId);
+        result.put("prosumerId", request.prosumerId);
+        result.put("gridCellId", request.gridCellId);
+        result.put("marketPrice", request.marketPrice);
+        result.put("socPercent", request.socPercent);
+        result.put("evaluation", evaluation);
+        result.put("recommendedAction", recommendedAction);
+        result.put("reason", reason);
+
+        return Response.ok(result.toString(), MediaType.APPLICATION_JSON).build();
     }
 
     @GET
