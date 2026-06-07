@@ -41,7 +41,7 @@ public class EnergyAnalyticsResourceTest {
     @Test
     public void testGetByMetricType() {
         given()
-          .when().get("/EnergyAnalytics/metric/ENERGY_DISCHARGED_BY_ZONE")
+          .when().get("/EnergyAnalytics/metric_type/ENERGY_DISCHARGED_BY_ZONE")
           .then()
              .statusCode(200);
     }

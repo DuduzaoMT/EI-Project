@@ -42,43 +42,32 @@ public class FlexibilityEventResourceTest {
     }
 
     @Test
-    public void testEvaluateFlexibilityHighSOC() {
-        String requestJson = "{\"assetId\":\"BATT-001\",\"prosumerId\":1,\"gridCellId\":\"LISBON-DT\",\"marketPrice\":\"HIGH\",\"socPercent\":92.5}";
-        
-        given()
-          .contentType("application/json")
-          .body(requestJson)
-          .when().post("/Flexibility/Evaluate")
-          .then()
-             .statusCode(200)
-             .body(containsString("ARBITRAGE"))
-             .body(containsString("SELL"));
-    }
+    public void testEmitEvent() {
 
-    @Test
-    public void testEvaluateFlexibilityLowSOC() {
-        String requestJson = "{\"assetId\":\"BATT-002\",\"prosumerId\":1,\"gridCellId\":\"LISBON-DT\",\"marketPrice\":\"HIGH\",\"socPercent\":15.0}";
-        
-        given()
-          .contentType("application/json")
-          .body(requestJson)
-          .when().post("/Flexibility/Evaluate")
-          .then()
-             .statusCode(200)
-             .body(containsString("BALANCING"))
-             .body(containsString("UNAVAILABLE"));
-    }
+        String requestJson = """
+        {
+            "asset_id":"BATT-001",
+            "prosumer_id":1,
+            "grid_cell_id":"LISBON-DT",
+            "logic_type":"ARBITRAGE",
+            "proposed_action":"SELL",
+            "incentive_value":10.5,
+            "target_value_kw":5.0,
+            "telemetry_reference_id":100
+        }
+        """;
 
-    @Test
-    public void testEvaluateFlexibilityOther() {
-        String requestJson = "{\"assetId\":\"SOLAR-001\",\"prosumerId\":2,\"gridCellId\":\"PORTO-NW\",\"marketPrice\":\"NORMAL\",\"socPercent\":30.0}";
-        
         given()
-          .contentType("application/json")
-          .body(requestJson)
-          .when().post("/Flexibility/Evaluate")
-          .then()
-             .statusCode(200)
-             .body(containsString("EVALUATED_NO_ACTION"));
+            .contentType("application/json")
+            .body(requestJson)
+        .when()
+            .post("/Flexibility/Emit")
+        .then()
+            .statusCode(201)
+            .body("asset_id", equalTo("BATT-001"))
+            .body("prosumer_id", equalTo(1))
+            .body("logic_type", equalTo("ARBITRAGE"))
+            .body("proposed_action", equalTo("SELL"))
+            .body("status", equalTo("PUBLISHED"));
     }
 }

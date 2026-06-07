@@ -10,28 +10,30 @@
 
 ## Test Summary by Microservice
 
-| Microservice | Tests | Coverage |
-|---|---|---|
-| Prosumer | 4 | CRUD + asset management |
-| AssetLink | 5 | Relationships |
-| UtilityOperator | 5 | Operations + grid cells |
-| GridBalancing | 6 | Events + Kafka |
-| FlexibilityEvent | 7 | Evaluation logic |
-| Telemetry | 5 | Data retrieval |
-| EnergyAnalytics | 4 | Metrics + Kafka |
-| ArtificialIntelligence | 2 | Service integration |
+| Microservice           | Tests | Coverage                |
+| ---------------------- | ----- | ----------------------- |
+| Prosumer               | 4     | CRUD + asset management |
+| AssetLink              | 5     | Relationships           |
+| UtilityOperator        | 5     | Operations + grid cells |
+| GridBalancing          | 6     | Events + Kafka          |
+| FlexibilityEvent       | 5     | Evaluation logic        |
+| Telemetry              | 5     | Data retrieval          |
+| EnergyAnalytics        | 4     | Metrics + Kafka         |
+| ArtificialIntelligence | 1     | Service integration     |
 
 ---
 
 ## How to Run Tests
 
 **Single Microservice:**
+
 ```bash
 cd microservices/Prosumer
 ./mvnw test
 ```
 
 **All Microservices:**
+
 ```bash
 cd microservices
 for dir in Prosumer AssetLink UtilityOperator GridBalancing FlexibilityEvent Telemetry EnergyAnalytics ArtificialIntelligence; do
@@ -40,6 +42,7 @@ done
 ```
 
 **Specific Test:**
+
 ```bash
 ./mvnw test -Dtest=ProsumerResourceTest#testGetAllProsumers
 ```
@@ -49,12 +52,14 @@ done
 ## Test Cases by Service
 
 ### Prosumer (4 tests)
+
 - `testGetAllProsumers` - GET /Prosumer → 200
 - `testGetSingleProsumer` - GET /Prosumer/1 → 200
 - `testCreateProsumer` - POST /Prosumer → 201
 - `testGetProsumerAssets` - GET /Prosumer/1/assets → 200
 
 ### AssetLink (5 tests)
+
 - `testGetAllAssetLinks` - GET /AssetLink → 200
 - `testGetSingleAssetLink` - GET /AssetLink/1 → 200
 - `testGetAssetLinkByProsumerAndOperator` - GET /AssetLink/1/1 → 200
@@ -62,6 +67,7 @@ done
 - `testDeleteAssetLink` - DELETE /AssetLink/4 → 204
 
 ### UtilityOperator (5 tests)
+
 - `testGetAllUtilityOperators` - GET /UtilityOperator → 200
 - `testGetSingleUtilityOperator` - GET /UtilityOperator/1 → 200
 - `testCreateUtilityOperator` - POST /UtilityOperator → 201
@@ -69,6 +75,7 @@ done
 - `testUpdateGridCellCapacity` - PUT /UtilityOperator/grid-cells/1/75.0 → 204
 
 ### GridBalancing (6 tests)
+
 - `testGetAllGridBalancingEvents` - GET /GridBalancing → 200
 - `testGetSingleGridBalancingEvent` - GET /GridBalancing/1 → 200/404
 - `testGetBySourceGridCell` - GET /GridBalancing/source/LISBON-DT → 200
@@ -77,15 +84,15 @@ done
 - `testEmitGridBalancingEvent` - POST /GridBalancing/Emit → 201 + Kafka
 
 ### FlexibilityEvent (7 tests)
+
 - `testGetAllFlexibilityEvents` - GET /Flexibility → 200
 - `testGetSingleFlexibilityEvent` - GET /Flexibility/1 → 200/404
 - `testGetByGridCell` - GET /Flexibility/grid/LISBON-DT → 200
 - `testGetByStatus` - GET /Flexibility/status/PUBLISHED → 200
-- `testEvaluateFlexibilityHighSOC` - POST /Flexibility/Evaluate (SOC 92.5%) → 200 + Kafka
-- `testEvaluateFlexibilityLowSOC` - POST /Flexibility/Evaluate (SOC 15%) → 200 + Kafka
-- `testEvaluateFlexibilityOther` - POST /Flexibility/Evaluate (no emit) → 200
+- `testEmitEvent` - POST /Flexibility/Emit -> 200 + Kafka
 
 ### Telemetry (5 tests)
+
 - `testGetAllTelemetry` - GET /Telemetry → 200
 - `testGetSingleTelemetry` - GET /Telemetry/1 → 200/404
 - `testGetTelemetryByAssetId` - GET /Telemetry/asset/1 → 200
@@ -93,14 +100,16 @@ done
 - `testTelemetryEndpointExists` - GET /Telemetry → 200
 
 ### EnergyAnalytics (4 tests)
+
 - `testGetAllEnergyAnalytics` - GET /EnergyAnalytics → 200
 - `testGetSingleEnergyAnalytics` - GET /EnergyAnalytics/1 → 200/404
 - `testPublishEnergyMetric` - POST /EnergyAnalytics/Publish → 201 + Kafka
-- `testGetByMetricType` - GET /EnergyAnalytics/metric/... → 200
+- `testGetByMetricType` - GET /EnergyAnalytics/metric_type/... → 200
 
 ### ArtificialIntelligence (2 tests)
-- `testForecastingEndpointExists` - GET /forecast → 200/400/500
-- `testForecastWithValidParameters` - POST /forecast → 200/201/500
+
+- `testForecastingEndpointExists` - GET Forecasting/Analyze → 200/400/500
+- `testForecastWithValidParameters` - POST Forecasting/Analyze → 200/201/500
 
 ---
 
@@ -132,12 +141,12 @@ public class ProsumerResourceTest {
 
 ## Troubleshooting
 
-| Issue | Solution |
-|---|---|
-| 404 Not Found | Start microservice: `./mvnw quarkus:dev` |
-| Database errors | Check MySQL running, verify credentials |
-| Kafka tests fail | Start Kafka broker |
-| AI tests fail | Start Ollama service |
+| Issue            | Solution                                 |
+| ---------------- | ---------------------------------------- |
+| 404 Not Found    | Start microservice: `./mvnw quarkus:dev` |
+| Database errors  | Check MySQL running, verify credentials  |
+| Kafka tests fail | Start Kafka broker                       |
+| AI tests fail    | Start Ollama service                     |
 
 ---
 

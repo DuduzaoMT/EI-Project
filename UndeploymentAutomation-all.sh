@@ -33,11 +33,6 @@ cd Quarkus-Terraform/prosumer
 terraform destroy -auto-approve
 cd ../..
 
-# #Terraform - Quarkus utilityoperator
-cd Quarkus-Terraform/utilityoperator
-terraform destroy -auto-approve
-cd ../..
-
 # #Terraform - Quarkus assetlink
 cd Quarkus-Terraform/assetlink
 terraform destroy -auto-approve
@@ -57,6 +52,13 @@ cd ..
 cd Kafka
 terraform destroy -auto-approve
 cd ..
+
+source ./access-backup.sh
+
+# #Terraform - Quarkus utilityoperator
+cd Quarkus-Terraform/utilityoperator
+terraform destroy -auto-approve
+cd ../..
 
 # # #Terraform - Kong
 cd KongTerraform

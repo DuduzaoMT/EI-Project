@@ -100,6 +100,9 @@ cd Quarkus-Terraform/prosumer
 DeployMicroservice
 
 
+source ./access-backup.sh
+
+
 cd microservices/UtilityOperator/src/main/resources
 CompileCode
 cd Quarkus-Terraform/utilityoperator
