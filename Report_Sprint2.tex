@@ -1,0 +1,810 @@
+\documentclass[11pt,a4paper]{article}
+
+% ---------------------------------------------------------------------------
+% Packages
+% ---------------------------------------------------------------------------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{graphicx} % Required for inserting images
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{seqsplit}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{parskip}
+
+% ---------------------------------------------------------------------------
+% Listings style (used for curl commands, JSON payloads, HCL, properties...)
+% ---------------------------------------------------------------------------
+\definecolor{codebg}{rgb}{0.96,0.96,0.96}
+\definecolor{codecomment}{rgb}{0.45,0.45,0.45}
+\definecolor{codestring}{rgb}{0.6,0.0,0.0}
+\definecolor{codekeyword}{rgb}{0.0,0.0,0.6}
+
+\lstdefinestyle{code}{
+    backgroundcolor=\color{codebg},
+    commentstyle=\color{codecomment}\itshape,
+    keywordstyle=\color{codekeyword}\bfseries,
+    stringstyle=\color{codestring},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=6pt,
+    numberstyle=\tiny\color{codecomment},
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=2,
+    frame=single,
+    rulecolor=\color{black!20},
+    xleftmargin=1em,
+    xrightmargin=1em
+}
+\lstset{style=code}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!50!black,
+    urlcolor=blue!50!black,
+    citecolor=blue!50!black,
+    pdftitle={VPPaaS - Enterprise Integration - Sprint 2 Report},
+    pdfauthor={Afonso Carvalho (IST 116482), Eduardo Silva (IST 106929)}
+}
+
+% ---------------------------------------------------------------------------
+\title{
+    \textbf{Virtual Power Plant as a Service (VPPaaS)} \\[0.4em]
+    \Large Enterprise Integration --- Sprint 2 Technical Report \\[0.2em]
+    \large Business Process Orchestration with Camunda~8 and Kong API Gateway
+}
+\author{
+    Afonso Carvalho \textit{(IST 116482)} \\
+    Eduardo Silva \textit{(IST 106929)}
+}
+\date{June 2026}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+\noindent
+This report documents the Sprint~2 deliverable of the VPPaaS Enterprise
+Integration project. While Sprint~1 delivered the data plane (microservices,
+shared RDS database, Kafka backbone), Sprint~2 \emph{orchestrates} it into the
+eight business processes of the project brief using \textbf{Camunda~8} as the
+process engine and \textbf{Kong API Gateway} as the single entry point to every
+microservice. It covers (i) how each of the eight flows was modelled in BPMN
+and wired to the microservices through Kong; (ii) their end-to-end execution
+against the live AWS deployment, including the defects found and corrected
+during testing; and (iii) the documentation of the source code, Terraform
+infrastructure-as-code, installation procedures and parametrizations of the
+integration layer.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+% ===========================================================================
+\section{Introduction}
+% ===========================================================================
+
+The VPPaaS platform aggregates Distributed Energy Resources (DER) --- battery
+storage systems (BESS), solar inverters (PV) and EV chargers --- and exposes
+them as a single virtual power plant that a Utility Operator can use to balance
+supply and demand across grid cells. Sprint~1 delivered the data plane ---
+the domain microservices, the shared AWS RDS database and the Kafka event
+backbone, all provisioned through Terraform --- documented in
+\texttt{Report.md}/\texttt{Report.pdf}.
+
+Sprint~2 closes the loop required by the project brief: \emph{``orchestrate the
+business processes that coordinate these microservices, expose them through an
+API Gateway, and demonstrate that the resulting flows execute correctly from
+end to end''}. Concretely, the brief requires:
+
+\begin{enumerate}[label=(\arabic*)]
+    \item Modelling and deploying, through \textbf{Camunda} (orchestration
+          engine) and \textbf{Kong} (API Gateway), the eight business
+          processes that the platform must support: \emph{Prosumer
+          Management}, \emph{Utility Operator Management}, \emph{Asset Link
+          Management}, \emph{Telemetry Ingestion}, \emph{Flexibility
+          Emission}, \emph{Grid Balancing Recommendation}, \emph{Energy
+          Analytics} and \emph{Flexibility Forecasting (AI)};
+    \item Documenting \textbf{end-to-end tests} of the full execution of these
+          business processes against the deployed system;
+    \item Documenting the \textbf{source code, Terraform scripts, BPMN models,
+          installation procedures and parametrizations} that make the
+          integration layer reproducible.
+\end{enumerate}
+
+Sections~\ref{sec:architecture}--\ref{sec:docs} below address these three
+points in order.
+
+% ===========================================================================
+\section{Business Process Architecture}
+\label{sec:architecture}
+% ===========================================================================
+
+\subsection{Integration platform: Camunda~8 and Kong API Gateway}
+
+Two new infrastructure components were added on top of the Sprint~1 data plane:
+
+\begin{itemize}
+    \item \textbf{Camunda~8 (Zeebe + Operate + Tasklist), EC2 \texttt{t3.large}}
+          --- the orchestration engine that executes the BPMN process
+          definitions, exposes the \texttt{/v2/process-instances} and
+          \texttt{/v2/deployments} REST APIs, renders generated forms in
+          Tasklist and gives full execution visibility (active instances,
+          completed/incident instances, variables) in Operate.
+          Provisioned by \texttt{Camunda-Terraform/EC2CamundaEngine.tf}, an
+          \texttt{aws\_instance} of type \texttt{t3.large} with an
+          all-open security group (ports 8080/8081/8082), running the
+          official Camunda~8.8.9 Docker Compose stack via the \texttt{deploy.sh}
+          user-data script. Login: \texttt{demo}/\texttt{demo}.
+    \item \textbf{Kong API Gateway, EC2 \texttt{t3.small}} --- the single
+          public entry point for \emph{every} microservice. Provisioned by
+          \texttt{KongTerraform/EC2Kong.tf} and configured at boot by
+          \texttt{setup-kongGateway.sh}, which registers one Kong
+          \emph{service} and one \emph{route} per microservice (see
+          Table~\ref{tab:kong-routes}). Every BPMN service task that needs to
+          reach a microservice calls Kong --- never the microservice's EC2
+          address directly --- which is exactly the integration pattern the
+          brief asks for (``expose the business processes through an API
+          Gateway'').
+    \item \textbf{Konga, EC2 \texttt{t3.small}} --- a web administration UI
+          for Kong (\texttt{KongaTerraform/EC2Konga.tf}), used during
+          development to inspect/validate the services and routes that
+          \texttt{setup-kongGateway.sh} registers.
+\end{itemize}
+
+\renewcommand{\arraystretch}{1.25}
+\begin{table}[h!]
+\centering
+\footnotesize
+\caption{Kong services and routes registered by \texttt{setup-kongGateway.sh} (one per microservice)}
+\label{tab:kong-routes}
+\begin{tabular}{@{}p{0.33\textwidth}p{0.30\textwidth}p{0.24\textwidth}@{}}
+\toprule
+\textbf{Kong service name} & \textbf{Route path} (\texttt{strip\_path=true}) & \textbf{Upstream microservice} \\
+\midrule
+\texttt{\seqsplit{prosumer-service}} & \texttt{/prosumer} & Prosumer MS \\
+\texttt{\seqsplit{utility-operator-service}} & \texttt{\seqsplit{/utility-operator}} & UtilityOperator MS \\
+\texttt{\seqsplit{assetlink-service}} & \texttt{/assetlink} & AssetLink MS \\
+\texttt{\seqsplit{telemetry-service}} & \texttt{/telemetry} & Telemetry MS \\
+\texttt{\seqsplit{flexibility-event-service}} & \texttt{\seqsplit{/flexibility-event}} & FlexibilityEvent MS \\
+\texttt{\seqsplit{grid-balancing-service}} & \texttt{\seqsplit{/grid-balancing}} & GridBalancing MS \\
+\texttt{\seqsplit{energy-analytics-service}} & \texttt{\seqsplit{/energy-analytics}} & EnergyAnalytics MS \\
+\texttt{\seqsplit{artificial-intelligence-service}} & \texttt{\seqsplit{/artificial-intelligence}} & ArtificialIntelligence MS \\
+\bottomrule
+\end{tabular}
+\renewcommand{\arraystretch}{1}
+\end{table}
+
+\noindent
+With \texttt{strip\_path=true}, a request such as
+\texttt{GET http://<kong-dns>:8000/prosumer/Prosumer} arrives at the Prosumer
+microservice as \texttt{GET /Prosumer}. All the BPMN flows described below use
+this single Kong base URL --- in the current deployment
+\url{http://ec2-100-54-67-134.compute-1.amazonaws.com:8000} --- as the target
+of their HTTP Connector service tasks, so the orchestration layer never needs
+to know individual microservice EC2 addresses.
+
+\subsection{Modelling pattern: Initiator/Executor collaborations}
+
+Two of the eight flows (\emph{Prosumer Management} and \emph{Asset Link
+Management}/\emph{Telemetry Ingestion}) were modelled as \textbf{BPMN
+collaborations} made up of several independently-deployable processes that
+communicate through asynchronous \emph{messages}, following a classic
+``Initiator $\rightarrow$ Executor'' pattern:
+
+\begin{enumerate}
+    \item The \emph{Initiator} process starts from a \texttt{none start event},
+          collects input through a Tasklist user-task form (e.g. the data of
+          the Prosumer to create), and then \textbf{publishes a message} that
+          starts a second, independent process instance (the \emph{Executor}).
+    \item The \emph{Executor} process is triggered by a \textbf{message start
+          event}, runs the actual business logic --- promise/possibility
+          checks, the REST call to the microservice through Kong, and the
+          declaration step --- and finally publishes a confirmation message
+          back to the Initiator.
+    \item The Initiator resumes on a matching \textbf{message catch event} and
+          completes with an acceptance user task.
+\end{enumerate}
+
+This mirrors the request/promise/declare/accept commitment lifecycle described
+in the project brief's business-architecture section, and demonstrates
+asynchronous, message-based collaboration between independently deployed
+process definitions --- not just a single linear flow. The remaining flows
+(Utility Operator Management, Telemetry/AI/Analytics/Flexibility/Balancing)
+are modelled as single linear processes, since their business logic does not
+require cross-participant negotiation.
+
+A structural detail that is easy to overlook --- and that produced one of the
+defects documented in Section~\ref{sec:bugs} --- is that \textbf{every variable
+the Executor needs (in particular \texttt{camundaBaseUrl}, used by Tasklist
+form-generation service tasks) must be explicitly forwarded in the
+\texttt{variables} object of the message that starts it}; Camunda does not
+automatically share process variables across independent process instances.
+
+\subsection{Mapping the eight required business processes to BPMN models}
+
+Table~\ref{tab:flows} maps each of the eight business processes required by
+the brief to its BPMN file, Camunda \texttt{processDefinitionId}(s) and the
+microservices it orchestrates (always reached through Kong, per
+Table~\ref{tab:kong-routes}).
+
+\renewcommand{\arraystretch}{1.35}
+\begin{table}[h!]
+\centering
+\footnotesize
+\caption{The eight required business processes and their BPMN realisation}
+\label{tab:flows}
+\begin{tabular}{@{}p{0.205\textwidth}p{0.205\textwidth}p{0.21\textwidth}p{0.255\textwidth}@{}}
+\toprule
+\textbf{Business process} & \textbf{BPMN file} & \textbf{processDefinitionId(s)} & \textbf{Microservices orchestrated} \\
+\midrule
+1. Prosumer Management & \texttt{\seqsplit{ProsumerManagement.bpmn}} & \texttt{\seqsplit{ProsumerMngInitiator}} + Executor process & Prosumer MS \\
+2. Utility Operator Management & \texttt{\seqsplit{UtilityOperatorManagement.bpmn}} & \texttt{\seqsplit{UtilityOperatorManagement}} & UtilityOperator MS \\
+3. Asset Link Management & \texttt{\seqsplit{AssetLinkManagement.bpmn}} & \texttt{\seqsplit{ProsumerForAssetLink}} $\to$ \texttt{\seqsplit{AssetLinkManagement}} & Prosumer MS, AssetLink MS \\
+4. Telemetry Ingestion & \texttt{\seqsplit{AssetLinkManagement.bpmn}} (3rd participant) & \texttt{\seqsplit{TelemetryManagement}} & AssetLink MS, Telemetry MS \\
+5. Flexibility Emission & \texttt{\seqsplit{FlexibilityEmission.bpmn}} & \texttt{\seqsplit{FlexibilityEmissionProcess}} & Telemetry MS, FlexibilityEvent MS \\
+6. Grid Balancing Recommendation & \texttt{\seqsplit{GridBalancing.bpmn}} & \texttt{\seqsplit{GridBalancingProcess}} & UtilityOperator MS, Telemetry MS, AssetLink MS, Prosumer MS, GridBalancing MS \\
+7. Energy Analytics & \texttt{\seqsplit{EnergyAnalytics.bpmn}} & \texttt{\seqsplit{EnergyAnalyticsProcess}} & Telemetry MS, Prosumer MS, UtilityOperator MS, EnergyAnalytics MS \\
+8. Flexibility Forecasting (AI) & \texttt{\seqsplit{AIForecasting.bpmn}} & \texttt{\seqsplit{AIForecastingProcess}} & FlexibilityEvent MS, ArtificialIntelligence MS \\
+\bottomrule
+\end{tabular}
+\end{table}
+\renewcommand{\arraystretch}{1}
+
+\noindent
+Note that \emph{Asset Link Management} and \emph{Telemetry Ingestion} are
+modelled inside the \textbf{same} BPMN file
+(\texttt{AssetLinkManagement.bpmn}) as a three-participant collaboration
+(\texttt{ProsumerForAssetLink} $\rightarrow$ \texttt{AssetLinkManagement}
+$\rightarrow$ \texttt{TelemetryManagement}); this reflects the real dependency
+described in the brief, where activating an asset link is what triggers the
+creation of the dynamic Kafka consumer for that link's telemetry topic.
+
+\subsection{Detailed description of each flow}
+
+\subsubsection*{1 --- Prosumer Management}
+\textbf{Collaboration} \texttt{ProsumerForAssetLink-style Initiator/Executor}.
+The Initiator process \texttt{ProsumerMngInitiator} starts from a none start
+event and presents the user task \emph{``Decide the Data for Prosumer Creation
+order''} (generated form fields: \texttt{Name}, \texttt{Fiscal Number},
+\texttt{Location}). The service task \emph{``Request Prosumer Creation
+order''} then publishes a message carrying \texttt{name}, \texttt{location},
+\texttt{fiscalnumber} and \texttt{camundaBaseUrl}, starting the Executor
+process. The Executor runs \emph{``Verify if execute is possible''} (a
+checkbox user task: \emph{``Is it possible to promise the request?''}),
+\emph{``Promise Prosumer Creation order''}, the HTTP Connector service task
+\emph{``Create Prosumer''} (\texttt{POST
+http://<kong-dns>:8000/prosumer/Prosumer}), \emph{``Declare Prosumer Creation
+order''} and finally \emph{``Accept Prosumer Creation order''}, after which
+both processes reach their end events. This is the flow that was driven to
+completion in the live environment; see Section~\ref{sec:e2e-prosumer}.
+
+\subsubsection*{2 --- Utility Operator Management}
+\textbf{Single linear process} \texttt{UtilityOperatorManagement}, with no
+required start variables. It chains seven user/service tasks, each
+\texttt{assignee=demo}: \emph{Request} $\rightarrow$ \emph{Verify if
+... is possible} $\rightarrow$ \emph{Promise} $\rightarrow$ \emph{Create
+Utility Operator} (real REST call, \texttt{POST
+http://<kong-dns>:8000/utility-operator/UtilityOperator}) $\rightarrow$
+\emph{Declare} $\rightarrow$ \emph{Check} $\rightarrow$ \emph{Accept}, each
+gated by an \emph{``Is it possible/acceptable?''} checkbox form. Input data
+collected on the first task: \texttt{Name}, \texttt{Location}.
+
+\subsubsection*{3 --- Asset Link Management}
+\textbf{Three-participant collaboration} inside
+\texttt{AssetLinkManagement.bpmn}: \texttt{ProsumerForAssetLink} (Initiator,
+none start event) $\rightarrow$ \texttt{AssetLinkManagement} (message start,
+\texttt{messageRef = Message\_2r1j62e}) $\rightarrow$
+\texttt{TelemetryManagement} (message start, \texttt{messageRef =
+Message\_2mp8beu}). The Initiator's user task \emph{``Decide the data to
+AssetLink association order''} (form \texttt{FormChoiceDataForAssetLink};
+fields \texttt{UtilityOperatorID}, \texttt{prosumerID}) feeds a message that
+starts \texttt{AssetLinkManagement}, which runs \emph{``Verify if execute
+product is possible''} (form \texttt{Form\_Promise\_AssetLinkMng}, checkbox
+\texttt{promise}) and the REST call that creates the AssetLink record (via
+Kong, \texttt{/assetlink/AssetLink}); on completion it both replies to the
+Initiator and starts \texttt{TelemetryManagement}. The Initiator finally
+collects the acceptance user tasks \emph{``Check AssetLink association
+order''} / \emph{``Check Telemetry Consumer Order''} (form
+\texttt{Form\_Accept\_AssetLinkMng}, checkbox \texttt{accept}).
+
+\subsubsection*{4 --- Telemetry Ingestion}
+\textbf{Third participant of the same collaboration}, process
+\texttt{TelemetryManagement}. Triggered by the message published by
+\texttt{AssetLinkManagement} once an asset link is created, it runs its own
+\emph{``Verify if execute product is possible''} step (same form/checkbox
+pattern, \texttt{Form\_Promise\_AssetLinkMng}/\texttt{promise}) and the HTTP
+Connector service task that calls \texttt{POST
+http://<kong-dns>:8000/telemetry/Telemetry/Consume} to start the dynamic
+Kafka consumer for the new \texttt{\{assetLinkId\}-\{utilityOperatorId\}}
+topic --- the integration point between the orchestration layer and the
+Telemetry MS's \texttt{DynamicTopicConsumer} described in Sprint~1
+(\texttt{Report.md}, \S3.5). It then replies with a confirmation message
+consumed back in the Initiator.
+
+\subsubsection*{5 --- Flexibility Emission}
+\textbf{Single linear process} \texttt{FlexibilityEmissionProcess}. The user
+task \emph{``Select Asset for Flexibility Emission''} collects \texttt{Asset
+ID} (e.g. \texttt{BATT-001}/\texttt{SOLAR-001}) and \texttt{Grid Cell ID}
+(e.g. \texttt{LISBON-DT}); automatic service tasks then query the latest
+telemetry for that asset through Kong (\texttt{/telemetry/Telemetry/asset/...})
+and call \texttt{POST .../flexibility-event/Flexibility/Emit}, exercising the
+rule-based emission logic of the FlexibilityEvent MS (D2 in
+\texttt{Report.md}).
+
+\subsubsection*{6 --- Grid Balancing Recommendation}
+\textbf{Single linear process} \texttt{GridBalancingProcess}. The user task
+\emph{``Select Grid Zone for Balancing''} collects \texttt{Grid Cell ID}
+(\texttt{LISBON-DT}); the process then automatically aggregates data from the
+UtilityOperator, Telemetry, AssetLink and Prosumer microservices (through
+Kong) and calls \texttt{POST .../grid-balancing/GridBalancing/Emit},
+reproducing the data-acquisition chain documented as D3 in \texttt{Report.md}.
+
+\subsubsection*{7 --- Energy Analytics}
+\textbf{Single linear process} \texttt{EnergyAnalyticsProcess}. The user task
+\emph{``Select Zone for Energy Analytics''} collects \texttt{Grid Cell ID};
+the process aggregates telemetry, prosumer and operator data through Kong and
+calls \texttt{POST .../energy-analytics/EnergyAnalytics/Publish}, corresponding
+to the D4 flow in \texttt{Report.md}.
+
+\subsubsection*{8 --- Flexibility Forecasting (AI)}
+\textbf{Single linear process} \texttt{AIForecastingProcess}. The user task
+\emph{``Select Zone for AI Flexibility Forecast''} collects \texttt{Grid Cell
+ID} (\texttt{LISBON-DT}); the automatic chain \emph{``Get Flexibility Event
+History''} $\rightarrow$ \emph{``AI Analysis via Ollama (ArtificialIntelligence
+MS)''} $\rightarrow$ \emph{``Emit AI Flexibility Event (AI\_DISCHARGE)''}
+reproduces the D5 flow: it queries historical \texttt{FlexibilityEvent} rows,
+sends them to the \texttt{ArtificialIntelligence} MS (Ollama / \texttt{llama3.2})
+through Kong, and republishes the AI-enriched event with
+\texttt{offerType = AI\_DISCHARGE}. As this performs a real LLM inference call,
+its execution time is noticeably longer than the other flows.
+
+% ===========================================================================
+\section{End-to-end Testing}
+\label{sec:testing}
+% ===========================================================================
+
+\subsection{Test environment and methodology}
+
+All tests were executed against the live AWS deployment produced by
+\texttt{DeploymentAutomation-ubuntu.sh} / \texttt{-macOS.sh} (Sprint~1
+infrastructure plus the Camunda, Kong and Konga instances added for Sprint~2):
+
+\begin{itemize}
+    \item \textbf{Camunda~8}: \url{http://ec2-54-159-105-82.compute-1.amazonaws.com:8080}
+          (Operate at \texttt{/operate}, login \texttt{demo}/\texttt{demo});
+    \item \textbf{Kong Gateway}: \url{http://ec2-100-54-67-134.compute-1.amazonaws.com:8000};
+    \item \textbf{Konga}: \url{http://ec2-98-92-246-7.compute-1.amazonaws.com:1337}.
+\end{itemize}
+
+\noindent
+\textbf{Method.} Every flow with a \texttt{none start event} is started with a
+\texttt{POST /v2/process-instances} call against the Camunda REST API (see
+Listing~\ref{lst:start-process} for the generic template); the execution is
+then driven step by step in \textbf{Operate}, completing the generated
+Tasklist forms with realistic seed data (the \texttt{LISBON-DT} grid cell, the
+\texttt{ArcoCegoLisbon} operator, the seed prosumer \texttt{client1} and assets
+\texttt{BATT-001}/\texttt{SOLAR-001} created in Sprint~1, plus the new
+\texttt{Jo\~ao Silva} prosumer created during this sprint's tests). Completion
+is verified by querying the corresponding microservice \textbf{through Kong}
+and checking that a new row was persisted in the shared RDS database. The full
+script of commands and form values for all eight flows is kept in
+\texttt{BPMN/EndToEnd\_Tests.md}, written specifically to support
+the live defence demonstration.
+
+\begin{lstlisting}[language=bash, caption={Generic template for starting any none-start-event process}, label={lst:start-process}]
+curl -X POST "http://<camunda-dns>:8080/v2/process-instances" \
+  -H "Content-Type: application/json" \
+  -d '{"processDefinitionId": "<PROCESS_ID>", "variables": { ... }}'
+\end{lstlisting}
+
+\subsection{Full end-to-end execution: Prosumer Management}
+\label{sec:e2e-prosumer}
+
+The \emph{Prosumer Management} flow was driven to completion end to end ---
+from the Camunda REST API, through every user task in Operate/Tasklist, through
+Kong, into the Prosumer microservice, and finally into a persisted row in the
+shared RDS MySQL database. This is the flow chosen to demonstrate, in the
+defence, that the orchestration layer genuinely calls the deployed
+microservices (rather than stopping at a mocked or partially-wired model).
+
+\textbf{1. Start the Initiator instance:}
+\begin{lstlisting}[language=bash]
+curl -X POST "http://ec2-54-159-105-82.compute-1.amazonaws.com:8080/v2/process-instances" \
+  -H "Content-Type: application/json" \
+  -d '{"processDefinitionId": "ProsumerMngInitiator",
+       "variables": {"camundaBaseUrl": "http://ec2-54-159-105-82.compute-1.amazonaws.com:8080"}}'
+\end{lstlisting}
+
+\textbf{2. Drive the flow in Operate/Tasklist} (Section~\ref{sec:architecture}
+describes each step in detail): fill \emph{``Decide the Data for Prosumer
+Creation order''} with \texttt{Name = Jo\~ao Silva}, \texttt{Fiscal Number =
+123456789}, \texttt{Location = Lisboa}; the Executor process starts
+automatically; complete \emph{``Verify if execute is possible''} by checking
+\emph{``Is it possible to promise the request?''} = yes; the chain
+\emph{Promise} $\rightarrow$ \emph{Create Prosumer} $\rightarrow$
+\emph{Declare} $\rightarrow$ \emph{Accept} runs automatically and both process
+instances reach their end events.
+
+\textbf{3. Verify persistence through Kong:}
+\begin{lstlisting}[language=bash, caption={Verification call and observed result --- a new row was created}]
+$ curl http://ec2-100-54-67-134.compute-1.amazonaws.com:8000/prosumer/Prosumer
+[
+  {"FiscalNumber": 123456, "id": 1, "location": "Lisbon",  "name": "client1"},
+  {"FiscalNumber": 123456789, "id": 2, "location": "Lisboa", "name": "Joao Silva"}
+]
+\end{lstlisting}
+
+\noindent
+Record \texttt{id = 2} is the row created live by the orchestrated flow,
+confirming that the chain \textbf{Camunda $\to$ Kong $\to$ Prosumer
+microservice $\to$ RDS MySQL} works end to end. (An earlier run produced a row
+with \texttt{FiscalNumber: null}; that defect, and how it was corrected, is
+documented as Defect~3 in Section~\ref{sec:bugs}, and the run shown above is
+the corrected, fresh execution.)
+
+\subsection{Defects identified and corrected}
+\label{sec:bugs}
+
+Driving the Prosumer flow end to end --- and then proactively re-checking the
+remaining seven flows for the same classes of problem --- surfaced three
+systemic defects in the BPMN models. None of them were visible from a static
+read of the diagrams; all three only manifested at runtime, which is precisely
+why end-to-end testing (rather than design-time validation alone) is required
+by the brief. All three were fixed \emph{at the BPMN-definition level} and the
+affected processes were \textbf{redeployed and re-run from a clean instance}
+--- the user's explicit preference over patching a running incident through
+Operate's variable panel, since a definition-level bug will simply recur on
+the next instantiation if only the symptom is patched.
+
+\begin{small}
+\begin{longtable}{@{}p{0.20\textwidth}p{0.37\textwidth}p{0.37\textwidth}@{}}
+\toprule
+\textbf{Defect} & \textbf{Symptom \& root cause} & \textbf{Fix applied} \\
+\midrule
+\endhead
+\textbf{1. \texttt{camundaBaseUrl} not propagated between collaborating processes}
+&
+Incident raised in Operate: \texttt{\seqsplit{jakarta.validation.ValidationException}: Property: url: ... must not be blank}. Root cause: the Initiator never forwarded its \texttt{camundaBaseUrl} variable inside the message body that starts the Executor, so the Executor's Tasklist form-generation service task received a blank URL. This is a \emph{structural} collaboration bug, not a one-off. &
+Added \texttt{"camundaBaseUrl": camundaBaseUrl} as the first key of the \texttt{variables} object published by the message-sending service tasks: in \texttt{ProsumerManagement.bpmn} (``Request Prosumer Creation order'', Initiator~$\to$~Executor) and, proactively, in \emph{both} message-publication points of \texttt{AssetLinkManagement.bpmn} (\texttt{ProsumerForAssetLink}~$\to$~\texttt{AssetLinkManagement} and~$\to$~\texttt{TelemetryManagement}). \\
+\addlinespace
+\textbf{2. Empty Kong-address placeholder in service-task URLs}
+&
+Service tasks failed with a malformed target \texttt{\seqsplit{http://:8000/prosumer/Prosumer}} (empty host). Root cause: an unsubstituted \texttt{KONG\_ADDRESS} placeholder left over from the BPMN authoring/templating step --- present not just in Prosumer Management but systemically across the project. &
+Found \textbf{21 occurrences across all 7 BPMN files} (1 in \texttt{ProsumerManagement}, fixed individually first; 20 more in \texttt{AIForecasting}, \texttt{AssetLinkManagement}, \texttt{EnergyAnalytics}, \texttt{UtilityOperatorManagement}, \texttt{GridBalancing}, \texttt{FlexibilityEmission}). Corrected with one global substitution (Listing~\ref{lst:sed-fix}) replacing the empty host with the live Kong DNS, verified afterwards with a zero-result grep for the broken pattern. \\
+\addlinespace
+\textbf{3. Variable name case-mismatch dropped the fiscal number}
+&
+The created Prosumer record persisted with \texttt{"FiscalNumber": null}. Root cause: the ``Create Prosumer'' service task referenced the FEEL variable \texttt{fiscalNumber} (camelCase), while the actual process variable produced by the form is \texttt{fiscalnumber} (lowercase) --- so the expression resolved to \texttt{null}. &
+Corrected the request-body expression in \texttt{ProsumerManagement.bpmn} from \texttt{"FiscalNumber": fiscalNumber} to \texttt{"FiscalNumber": fiscalnumber}; redeployed and re-ran a fresh instance, which produced the correctly-populated record \texttt{id = 2} shown in Listing~\ref{lst:e2e-verify-result} (FiscalNumber~=~123456789). \\
+\bottomrule
+\caption{Defects found while end-to-end testing the BPMN flows, their root cause and the corrective action taken at the process-definition level.}
+\label{tab:bugs}
+\end{longtable}
+\end{small}
+
+\begin{lstlisting}[language=bash, caption={Single global substitution that corrected the empty-Kong-address defect (Defect 2) in 20 locations across 6 files in one pass}, label={lst:sed-fix}]
+cd BPMN && sed -i \
+  's|http://:8000|http://ec2-100-54-67-134.compute-1.amazonaws.com:8000|g' \
+  AIForecasting.bpmn AssetLinkManagement.bpmn EnergyAnalytics.bpmn \
+  UtilityOperatorManagement.bpmn GridBalancing.bpmn FlexibilityEmission.bpmn
+\end{lstlisting}
+
+\noindent
+After every edit to a \texttt{.bpmn} file, the corrected definition must be
+\textbf{redeployed} before being tested again (Listing~\ref{lst:redeploy}); a
+running instance keeps executing the version of the definition it was started
+with, so an in-place edit has no effect on instances already in flight.
+
+\begin{lstlisting}[language=bash, caption={Redeploying a corrected BPMN definition to Camunda}, label={lst:redeploy}]
+curl -L -X POST "http://ec2-54-159-105-82.compute-1.amazonaws.com:8080/v2/deployments" \
+  -H "Content-Type: multipart/form-data" -H "Accept: application/json" \
+  -F "resources=@./BPMN/<FILE_NAME>.bpmn"
+\end{lstlisting}
+
+\begin{lstlisting}[caption={Final verification result referenced from Section~\ref{sec:e2e-prosumer} (Defect 3 corrected: FiscalNumber persists)}, label={lst:e2e-verify-result}]
+{"FiscalNumber": 123456789, "id": 2, "location": "Lisboa", "name": "Joao Silva"}
+\end{lstlisting}
+
+\subsection{Test procedures for the remaining seven flows}
+
+To make the remaining flows reproducible for the live defence, every flow was
+documented with its exact start command, its Tasklist step sequence (with
+concrete seed-data values to type into each form) and its Kong verification
+call, in \texttt{BPMN/EndToEnd\_Tests.md}. The flows are grouped by
+modelling complexity:
+
+\begin{itemize}
+    \item \textbf{Group 1 --- single-process flows} (\emph{Utility Operator
+          Management}, \emph{AI Forecasting}, \emph{Energy Analytics},
+          \emph{Flexibility Emission}, \emph{Grid Balancing
+          Recommendation}): no collaboration/messages, no
+          \texttt{camundaBaseUrl} requirement --- only affected by Defect~2
+          (broken Kong address), already corrected in all six files.
+    \item \textbf{Group 2 --- \emph{Asset Link Management}/\emph{Telemetry
+          Ingestion}}: equivalent in complexity to \emph{Prosumer
+          Management} --- a three-participant message collaboration
+          (\texttt{ProsumerForAssetLink} $\to$ \texttt{AssetLinkManagement}
+          $\to$ \texttt{TelemetryManagement}), where Operate shows three
+          separate process instances that must be alternately advanced; the
+          same two corrections (Defects~1 and~2) were applied here too.
+\end{itemize}
+
+\noindent
+For \emph{Group~1}, each flow follows the same shape: \texttt{POST
+/v2/process-instances} with the bare \texttt{processDefinitionId} (no start
+variables required), one user task that selects the test subject (a
+\texttt{Grid Cell ID} of \texttt{LISBON-DT}, an \texttt{Asset ID} of
+\texttt{BATT-001}/\texttt{SOLAR-001}, etc.), then an automatic chain of
+service tasks that aggregates data from the relevant microservices through
+Kong and posts the result to the owning microservice's ``emit/publish''
+endpoint. \emph{Group~2} follows the Initiator/Executor pattern described in
+Section~\ref{sec:architecture}, seeded with \texttt{UtilityOperatorID = 1}
+(\texttt{ArcoCegoLisbon}) and \texttt{ProsumerID = 1} or \texttt{2} (the
+\texttt{Jo\~ao Silva} record created in Section~\ref{sec:e2e-prosumer}).
+
+% ===========================================================================
+\section{Source Code, Infrastructure and Parametrization Documentation}
+\label{sec:docs}
+% ===========================================================================
+
+This section documents the artefacts that are \emph{new} in Sprint~2 ---
+the BPMN process definitions and the Camunda/Kong/Konga infrastructure that
+orchestrates and exposes the Sprint~1 microservices. The microservice source
+code, RDS/Kafka Terraform, deployment automation and Kafka parametrization
+were already documented in full in \texttt{Report.md} (Sprint~1 deliverable);
+that documentation is referenced rather than duplicated, and is summarised in
+Table~\ref{tab:sprint1-recap} for completeness.
+
+\subsection{Repository layout of the orchestration layer}
+
+\begin{lstlisting}[caption={Layout of the new orchestration-layer artefacts inside the project repository}]
+EI-Project/
+ +-- BPMN/
+ |    +-- ProsumerManagement.bpmn        # Flow 1 (Initiator/Executor collab.)
+ |    +-- UtilityOperatorManagement.bpmn # Flow 2 (linear)
+ |    +-- AssetLinkManagement.bpmn       # Flows 3 & 4 (3-participant collab.)
+ |    +-- FlexibilityEmission.bpmn       # Flow 5 (linear)
+ |    +-- GridBalancing.bpmn             # Flow 6 (linear)
+ |    +-- EnergyAnalytics.bpmn           # Flow 7 (linear)
+ |    +-- AIForecasting.bpmn             # Flow 8 (linear)
+ |    +-- EndToEnd_Tests.md     # Step-by-step E2E test script (all 8 flows)
+ +-- Camunda-Terraform/
+ |    +-- EC2CamundaEngine.tf            # t3.large EC2 + security group
+ |    +-- deploy.sh                      # user-data: boots Camunda 8.8.9 stack
+ +-- KongTerraform/
+ |    +-- EC2Kong.tf                     # t3.small EC2 + security group
+ |    +-- deploy.sh                      # user-data: installs/starts Kong
+ |    +-- setup-kongGateway.sh           # registers 8 services + 8 routes
+ +-- KongaTerraform/
+      +-- EC2Konga.tf                    # t3.small EC2 running the Konga admin UI
+\end{lstlisting}
+
+\subsection{Camunda~8 engine --- Terraform}
+
+\texttt{Camunda-Terraform/EC2CamundaEngine.tf} provisions a single
+\texttt{t3.large} \texttt{aws\_instance} (Camunda~8 needs more memory than the
+\texttt{t3.small} tier used for the microservices, since it runs Zeebe,
+Operate, Tasklist and Elasticsearch together) with an all-open security group
+(ports~0--65535, \texttt{0.0.0.0/0} --- adequate for a coursework
+demonstration, as already noted for the microservice security groups in
+Sprint~1) and a \texttt{user\_data\_replace\_on\_change = true} script that
+pulls and starts the official Camunda~8.8.9 Docker Compose distribution,
+exposing Operate/Tasklist/the REST API on ports 8080/8081/8082.
+
+\begin{lstlisting}[language=bash, caption={Core resource definition of the Camunda EC2 instance (\texttt{EC2CamundaEngine.tf})}]
+resource "aws_instance" "exampleInstallCamundaEngine" {
+  ami                    = "ami-07ff62358b87c7116"
+  instance_type          = "t3.large"
+  vpc_security_group_ids = [aws_security_group.instance.id]
+  key_name               = "vockey"
+  user_data              = "${file("deploy.sh")}"
+  user_data_replace_on_change = true
+}
+\end{lstlisting}
+
+\subsection{Kong API Gateway --- Terraform and service registration}
+
+\texttt{KongTerraform/EC2Kong.tf} provisions the Kong instance (\texttt{t3.small},
+same all-open security-group pattern) and exposes its public DNS as a
+Terraform output (\texttt{address}), which the deployment automation captures
+and forwards to \texttt{setup-kongGateway.sh}.
+
+\begin{lstlisting}[language=bash, caption={Core resource definition of the Kong EC2 instance (\texttt{EC2Kong.tf})}]
+resource "aws_instance" "exampleInstallKong" {
+  ami                    = "ami-07ff62358b87c7116"
+  instance_type          = "t3.small"
+  vpc_security_group_ids = [aws_security_group.instance.id]
+  key_name               = "vockey"
+  user_data              = "${file("deploy.sh")}"
+}
+
+output "address" {
+  value       = aws_instance.exampleInstallKong.public_dns
+  description = "Connect to the KONG at this endpoint"
+}
+\end{lstlisting}
+
+\noindent
+\texttt{setup-kongGateway.sh} is the parametrization script that turns a bare
+Kong instance into the platform's API Gateway: it receives the Kong DNS plus
+the DNS of every microservice as positional parameters, polls
+\texttt{http://<kong-dns>:8001/status} until the Admin API answers (up to 60
+attempts, 10\,s apart), and then calls a \texttt{register\_service} helper
+once per microservice that (a) \texttt{POST}s to \texttt{/services/} with the
+service's upstream URL and (b) \texttt{POST}s to
+\texttt{/services/\{name\}/routes} with \texttt{strip\_path=true} and the
+route path shown in Table~\ref{tab:kong-routes}.
+
+\begin{lstlisting}[language=bash, caption={Service/route registration pattern used for every microservice in \texttt{setup-kongGateway.sh}}]
+register_service() {
+    local service_name=$1 service_url=$2 route_path=$3 route_name=$4
+
+    curl -s -X POST "http://$addressKong:8001/services/" \
+        --data "name=$service_name" --data "url=$service_url" \
+        -H "Content-Type: application/x-www-form-urlencoded"
+
+    curl -s -X POST "http://$addressKong:8001/services/$service_name/routes" \
+        --data "name=$route_name" --data "paths=$route_path" \
+        --data "strip_path=true" \
+        -H "Content-Type: application/x-www-form-urlencoded"
+}
+
+# e.g.
+register_service "prosumer-service" "http://$addressProsumer:8080" "/prosumer" "prosumer-route"
+register_service "assetlink-service" "http://$addressAssetLink:8080" "/assetlink" "assetlink-route"
+# ... one call per microservice, see Table 1
+\end{lstlisting}
+
+\noindent
+The \texttt{strip\_path=true} option (added during this sprint's Kong setup
+work, see commit \texttt{fix(kong): include strip\_path option}) is what makes
+\texttt{/prosumer/Prosumer} resolve to \texttt{/Prosumer} on the upstream
+service --- without it, Kong would forward the full original path and every
+call would 404 against the microservice's JAX-RS routes.
+
+\subsection{Konga administration UI}
+
+\texttt{KongaTerraform/EC2Konga.tf} follows the same \texttt{t3.small} /
+all-open-security-group / \texttt{user\_data} pattern and starts the Konga
+container, which was used throughout development to visually confirm that
+\texttt{setup-kongGateway.sh} had registered the expected eight services and
+eight routes (Table~\ref{tab:kong-routes}) and to inspect/debug routing while
+the BPMN service tasks were being wired up.
+
+\subsection{BPMN process definitions --- parametrization conventions}
+
+Two parametrization conventions run through every BPMN file and are the most
+important thing to know when redeploying the orchestration layer against a
+\emph{new} environment (a fresh \texttt{terraform apply} always produces new
+EC2 public DNS names):
+
+\begin{enumerate}
+    \item \textbf{\texttt{camundaBaseUrl} process variable} --- every Tasklist
+          form-generation service task needs to know the base URL of the
+          Camunda REST API it is running against. It must be supplied when
+          \emph{starting} a none-start-event process
+          (\texttt{"variables": \{"camundaBaseUrl": "http://<camunda-dns>:8080"\}})
+          and explicitly \emph{forwarded} inside the \texttt{variables} object
+          of every message that starts a collaborating process (Defect~1,
+          Section~\ref{sec:bugs}).
+    \item \textbf{Kong base URL in HTTP Connector service-task targets} ---
+          every outbound REST call embedded in a service task's URL must
+          point at \texttt{http://<kong-dns>:8000/<route-path>/...}
+          (Table~\ref{tab:kong-routes}), \emph{not} at an individual
+          microservice's EC2 address. After a redeploy that produces a new
+          Kong DNS, all such URLs across the seven \texttt{.bpmn} files must
+          be updated --- which is exactly what the global \texttt{sed}
+          substitution in Listing~\ref{lst:sed-fix} automates.
+\end{enumerate}
+
+\noindent
+Both conventions, the current live endpoint values, and the redeploy command
+(Listing~\ref{lst:redeploy}) are kept up to date in
+\texttt{BPMN/EndToEnd\_Tests.md}, which doubles as the
+parametrization runbook for whoever re-runs the demo after a fresh deployment.
+
+\subsection{Recap: Sprint 1 source code, Terraform, installation and parametrization}
+
+The microservices, shared RDS database, Kafka broker, Docker/Terraform
+deployment automation and their parametrization were documented in full in
+\texttt{Report.md} (Sections~3--6) and are summarised here for traceability;
+they are the components that the BPMN flows in Section~\ref{sec:architecture}
+orchestrate through Kong.
+
+\begin{table}[h!]
+\centering
+\small
+\caption{Sprint 1 components orchestrated by the Sprint 2 BPMN flows (full documentation in \texttt{Report.md})}
+\label{tab:sprint1-recap}
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Component} & \textbf{Stack} & \textbf{Documented in \texttt{Report.md}} \\
+\midrule
+7 domain microservices + AI MS & Quarkus 3.27.2 / Java 17, reactive MySQL & \S2.1, \S3 \\
+Shared database & AWS RDS MySQL \texttt{db.t4g.micro}, schema \texttt{VPPaaS} & \S2.3, \S4.1 \\
+Event backbone & Apache Kafka 4.1.1 (KRaft, single broker) & \S2.2, \S4.2 \\
+AI forecasting runtime & Ollama (\texttt{llama3.2}) on \texttt{t3.large} EC2 & \S2.5, \S4.3 \\
+Image registry & Docker Hub & \S2.4 \\
+Deployment automation & \texttt{DeploymentAutomation-\{ubuntu,macOS\}.sh} & \S5.3 \\
+Parametrization & \texttt{access.sh}, \texttt{application.properties} template & \S6.1, \S6.2, \S6.3 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent
+\textbf{Installation procedure (end to end, Sprint~1 + Sprint~2):}
+\begin{enumerate}
+    \item Configure \texttt{access.sh} with AWS credentials, Docker Hub
+          credentials and \texttt{JAVA\_HOME}, then \texttt{source access.sh}
+          (\texttt{Report.md}~\S5.2).
+    \item Run \texttt{./DeploymentAutomation-ubuntu.sh} (or \texttt{-macOS.sh}):
+          provisions RDS, Kafka, the seven microservices plus the AI service,
+          and --- as extended for this sprint --- the Camunda, Kong and Konga
+          EC2 instances, capturing each component's public DNS via
+          \texttt{terraform output} and injecting it into the next step's
+          configuration (\texttt{Report.md}~\S5.3).
+    \item Create the static Kafka topics (\texttt{Report.md}~\S5.4).
+    \item Run \texttt{setup-kongGateway.sh} (automatically invoked by the
+          deployment script, or manually with the captured DNS values) to
+          register the eight Kong services/routes of Table~\ref{tab:kong-routes}.
+    \item Deploy the BPMN process definitions to Camunda
+          (Listing~\ref{lst:redeploy}, once per \texttt{.bpmn} file) and
+          confirm in Operate that all eight \texttt{processDefinitionId}s of
+          Table~\ref{tab:flows} are listed under \emph{Processes}.
+    \item Run the end-to-end tests of Section~\ref{sec:testing} (or follow
+          \texttt{BPMN/EndToEnd\_Tests.md} step by step) to validate
+          the full chain \emph{Camunda~$\to$~Kong~$\to$~microservice~$\to$~RDS/Kafka}.
+\end{enumerate}
+
+% ===========================================================================
+\section{Conclusion}
+% ===========================================================================
+
+Sprint~2 closes the gap between the data plane delivered in Sprint~1 and the
+business-process layer required by the VPPaaS brief. All eight required
+business processes --- \emph{Prosumer Management}, \emph{Utility Operator
+Management}, \emph{Asset Link Management}, \emph{Telemetry Ingestion},
+\emph{Flexibility Emission}, \emph{Grid Balancing Recommendation},
+\emph{Energy Analytics} and \emph{Flexibility Forecasting (AI)} --- were
+modelled in BPMN, deployed to Camunda~8, and wired to the underlying
+microservices exclusively through the Kong API Gateway, following the
+single-entry-point integration pattern the brief requires.
+
+Critically, the flows were not only modelled but \textbf{exercised end to
+end} against the live AWS deployment: the \emph{Prosumer Management} flow was
+run from a cold Camunda REST API call all the way to a persisted row in the
+shared RDS database (Section~\ref{sec:e2e-prosumer}), and the remaining seven
+flows were documented with reproducible start commands, Tasklist step
+sequences and Kong-side verification calls
+(\texttt{BPMN/EndToEnd\_Tests.md}). That process surfaced three
+classes of latent defects --- a missing cross-process variable, a systemic
+placeholder left unresolved in 21 service-task URLs across all seven BPMN
+files, and a variable-name case mismatch silently dropping a business field
+--- all of which were corrected at the BPMN-definition level and re-validated
+with fresh process instances (Section~\ref{sec:bugs}). Finding and fixing
+these issues is, in itself, the strongest evidence that the integration layer
+was genuinely tested rather than merely modelled: none of the three defects
+was visible from a static reading of the diagrams, and all three would have
+caused the live demonstration to fail had they not been caught beforehand.
+
+Finally, this report documents --- alongside the new orchestration-layer
+artefacts (BPMN models, Camunda/Kong/Konga Terraform, Kong service-registration
+script, parametrization conventions for \texttt{camundaBaseUrl} and the Kong
+base URL) --- the full installation procedure that takes the platform from
+zero to a running, end-to-end-testable system, building on and extending the
+Sprint~1 documentation already produced in \texttt{Report.md}.
+
+\end{document}

@@ -211,7 +211,7 @@
           <zeebe:input source="=false" target="storeResponse" />
           <zeebe:input source="=20" target="connectionTimeoutInSeconds" />
           <zeebe:input source="=20" target="readTimeoutInSeconds" />
-          <zeebe:input source="={&#10;  &#34;processDefinitionId&#34;: &#34;ProsumerMngExecutor&#34;,&#10;  &#34;variables&#34;: &#10;  { &#10;    &#34;name&#34;: name,&#10;    &#34;fiscalnumber&#34;: fiscalnumber,&#10;    &#34;location&#34; : location&#10;  }&#10;}" target="body" />
+          <zeebe:input source="={&#10;  &#34;processDefinitionId&#34;: &#34;ProsumerMngExecutor&#34;,&#10;  &#34;variables&#34;: &#10;  { &#10;    &#34;camundaBaseUrl&#34;: camundaBaseUrl,&#10;    &#34;name&#34;: name,&#10;    &#34;fiscalnumber&#34;: fiscalnumber,&#10;    &#34;location&#34; : location&#10;  }&#10;}" target="body" />
           <zeebe:input source="=false" target="ignoreNullValues" />
         </zeebe:ioMapping>
         <zeebe:taskHeaders>
@@ -304,7 +304,7 @@
           <zeebe:input source="=false" target="storeResponse" />
           <zeebe:input source="=20" target="connectionTimeoutInSeconds" />
           <zeebe:input source="=20" target="readTimeoutInSeconds" />
-          <zeebe:input source="={&#10;  &#34;FiscalNumber&#34;: fiscalNumber,&#10;  &#34;id&#34;: 0,&#10;  &#34;location&#34;: location,&#10;  &#34;name&#34;: name&#10;}" target="body" />
+          <zeebe:input source="={&#10;  &#34;FiscalNumber&#34;: fiscalnumber,&#10;  &#34;id&#34;: 0,&#10;  &#34;location&#34;: location,&#10;  &#34;name&#34;: name&#10;}" target="body" />
           <zeebe:input source="=false" target="ignoreNullValues" />
         </zeebe:ioMapping>
         <zeebe:taskHeaders>
