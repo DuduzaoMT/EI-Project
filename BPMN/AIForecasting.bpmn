@@ -33,7 +33,7 @@
         <zeebe:ioMapping>
           <zeebe:input source="noAuth" target="authentication.type" />
           <zeebe:input source="GET" target="method" />
-          <zeebe:input source="=&#34;http://KONG_ADDRESS:8000/flexibility-event/Flexibility/grid/&#34; + gridCellId" target="url" />
+          <zeebe:input source="=&#34;http://ec2-44-211-31-215.compute-1.amazonaws.com:8000/flexibility-event/Flexibility/grid/&#34; + gridCellId" target="url" />
           <zeebe:input source="=false" target="storeResponse" />
           <zeebe:input source="=20" target="connectionTimeoutInSeconds" />
           <zeebe:input source="=20" target="readTimeoutInSeconds" />
@@ -55,7 +55,7 @@
         <zeebe:ioMapping>
           <zeebe:input source="noAuth" target="authentication.type" />
           <zeebe:input source="POST" target="method" />
-          <zeebe:input source="http://KONG_ADDRESS:8000/artificial-intelligence/Forecasting/Analyze" target="url" />
+          <zeebe:input source="http://ec2-44-211-31-215.compute-1.amazonaws.com:8000/artificial-intelligence/Forecasting/Analyze" target="url" />
           <zeebe:input source="={&#10;  &#34;Content-Type&#34;: &#34;application/json&#34;,&#10;  &#34;accept&#34;: &#34;application/json&#34;&#10;}" target="headers" />
           <zeebe:input source="=false" target="storeResponse" />
           <zeebe:input source="=60" target="connectionTimeoutInSeconds" />
@@ -79,12 +79,12 @@
         <zeebe:ioMapping>
           <zeebe:input source="noAuth" target="authentication.type" />
           <zeebe:input source="POST" target="method" />
-          <zeebe:input source="http://KONG_ADDRESS:8000/flexibility-event/Flexibility/Emit" target="url" />
+          <zeebe:input source="http://ec2-44-211-31-215.compute-1.amazonaws.com:8000/flexibility-event/Flexibility/Emit" target="url" />
           <zeebe:input source="={&#10;  &#34;Content-Type&#34;: &#34;application/json&#34;,&#10;  &#34;accept&#34;: &#34;application/json&#34;&#10;}" target="headers" />
           <zeebe:input source="=false" target="storeResponse" />
           <zeebe:input source="=20" target="connectionTimeoutInSeconds" />
           <zeebe:input source="=20" target="readTimeoutInSeconds" />
-          <zeebe:input source="={&#10;  &#34;gridCellId&#34;: gridCellId,&#10;  &#34;aiAnalysis&#34;: aiAnalysisResult&#10;}" target="body" />
+          <zeebe:input source="={&#10;  &#34;asset_id&#34;: &#34;ZONE_AI&#34;,&#10;  &#34;grid_cell_id&#34;: gridCellId,&#10;  &#34;logic_type&#34;: &#34;AI_DISCHARGE&#34;,&#10;  &#34;proposed_action&#34;: &#34;DISCHARGE&#34;,&#10;  &#34;incentive_value&#34;: 15.0,&#10;  &#34;target_value_kw&#34;: 100.0&#10;}" target="body" />
           <zeebe:input source="=false" target="ignoreNullValues" />
         </zeebe:ioMapping>
         <zeebe:taskHeaders>
