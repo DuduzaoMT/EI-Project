@@ -23,7 +23,7 @@ resource "aws_instance" "exampleDeployQuarkus" {
   }
 
   key_name = "vockey"
-  user_data = "${file("creation.sh")}"
+  user_data = "${file("quarkus.sh")}"
   user_data_replace_on_change = true
 
   tags = {
